@@ -80,8 +80,8 @@ rm -rf %{buildroot}
 %{perl_vendorlib}/gorgone/
 %attr(755, root, root) %{_bindir}/gorgoned
 %attr(755, root, root) %{_usr}/local/bin/gorgone_config_init.pl
-%attr(755, root, root) %{_sysconfdir}/systemd/system/centreon-gorgone.service
-%config(noreplace) %{_sysconfdir}/sysconfig/centreon-gorgone
+%attr(755, root, root) %{_sysconfdir}/systemd/system/gorgoned.service
+%config(noreplace) %{_sysconfdir}/sysconfig/gorgoned
 %config(noreplace) %{_sysconfdir}/logrotate.d/gorgoned
 %dir %{_sysconfdir}/centreon-gorgone
 %{_sysconfdir}/centreon-gorgone/config.yaml
@@ -102,10 +102,10 @@ rm -rf %{buildroot}
 %{_bindir}/getent passwd centreon-gorgone &>/dev/null && %{_sbindir}/usermod -a G centreon centreon-gorgone 2> /dev/null
 
 %post
-%systemd_post centreon-gorgone.service || :
+%systemd_post gorgoned.service || :
 
 %preun
-%systemd_preun centreon-gorgone.service || :
+%systemd_preun gorgoned.service || :
 
 %postun
 %systemd_postun_with_restart centreon-gorgone.service || :

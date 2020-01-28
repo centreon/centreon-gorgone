@@ -54,9 +54,9 @@ mkdir -p %{buildroot}/%{perl_vendorlib}/gorgone
 %{__install} -d -m 0755 %{buildroot}%{_usr}/local/bin/
 %{__install} -d -m 0755 %{buildroot}%{_sysconfdir}/systemd/system/
 %{__install} -d -m 0775 %buildroot%{_localstatedir}/log/centreon-gorgone
-%{__cp} config/systemd/centreon-gorgone-service %{buildroot}%{_sysconfdir}/systemd/system/centreon-gorgone.service
+%{__cp} config/systemd/centreon-gorgone-service %{buildroot}%{_sysconfdir}/systemd/system/gorgoned.service
 %{__install} -d -m 0755 %{buildroot}%{_sysconfdir}/sysconfig
-%{__cp} config/systemd/centreon-gorgone-sysconfig %{buildroot}%{_sysconfdir}/sysconfig/centreon-gorgone
+%{__cp} config/systemd/centreon-gorgone-sysconfig %{buildroot}%{_sysconfdir}/sysconfig/gorgoned
 %{__install} -d -m 0755 %{buildroot}%{_sysconfdir}/logrotate.d
 %{__cp} config/logrotate/gorgoned %{buildroot}%{_sysconfdir}/logrotate.d/gorgoned
 
@@ -66,7 +66,7 @@ mkdir -p %{buildroot}/%{perl_vendorlib}/gorgone
 
 %{__install} -d -m 0755 %{buildroot}%{_sysconfdir}/centreon-gorgone/config.d/
 %{__cp} packaging/config.yaml %{buildroot}%{_sysconfdir}/centreon-gorgone/
-%{__cp} packaging/centreon.yaml %{buildroot}%{_sysconfdir}/centreon-gorgone/config.d/
+%{__cp} packaging/centreon.yaml %{buildroot}%{_sysconfdir}/centreon-gorgone/config.d/30-centreon.yaml
 
 %{_fixperms} $RPM_BUILD_ROOT/*
 
@@ -95,7 +95,7 @@ rm -rf %{buildroot}
 %{_bindir}/getent passwd centreon-gorgone &>/dev/null || %{_sbindir}/useradd -g centreon-gorgone -m -d %{_localstatedir}/log/centreon-gorgone -r centreon-gorgone 2> /dev/null
 
 %files centreon-config
-%{_sysconfdir}/centreon-gorgone/config.d/centreon.yaml
+%{_sysconfdir}/centreon-gorgone/config.d/30-centreon.yaml
 
 %post centreon-config
 %{_bindir}/getent passwd centreon &>/dev/null && %{_sbindir}/usermod -a G centreon-gorgone centreon 2> /dev/null

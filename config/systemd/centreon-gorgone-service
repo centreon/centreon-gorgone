@@ -23,7 +23,7 @@ After=centreon.service
 ReloadPropagatedFrom=centreon.service
 
 [Service]
-EnvironmentFile=/etc/sysconfig/centreon-gorgone
+EnvironmentFile=/etc/sysconfig/gorgoned
 ExecStart=/usr/bin/perl /usr/bin/gorgoned $OPTIONS
 Type=simple
 User=centreon-gorgone

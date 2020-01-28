@@ -40,7 +40,8 @@ sub init {
     $self->SUPER::init();
 
     $self->{centcore_config} = '/etc/centreon/conf.pm' if (!defined($self->{centcore_config}) || $self->{centcore_config} eq '');
-    $self->{gorgone_config} = '/etc/centreon/gorgoned.yml' if (!defined($self->{gorgone_config}) || $self->{gorgone_config} eq '');
+    $self->{gorgone_config} = '/etc/centreon-gorgone/config.yaml' if (!defined($self->{gorgone_config}) ||
+        $self->{gorgone_config} eq '');
 }
 
 sub read_centcore_config {
@@ -184,7 +185,7 @@ Specify the path to the centcore configuration file (default: '/etc/centreon/con
 
 =item B<--gorgone-config>
 
-Specify the gorgone config file created (default: '/etc/centreon/gorgoned.yml').
+Specify the gorgone config file created (default: '/etc/centreon-gorgone/config.yaml').
 
 =item B<--severity>
 

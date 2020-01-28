@@ -33,12 +33,14 @@ Requires:   perl(NetAddr::IP)
 Requires:   perl(Hash::Merge)
 AutoReqProv: no
 
+%description
+
 %package centreon-config
 Summary:    Configure Centreon Gorgone for use with Centreon Web
 Group:      Networking/Other
 Requires:   centreon-common
 
-%description
+%description centreon-config
 
 %prep
 %setup -q -n %{name}-%{version}

@@ -1,0 +1,3 @@
+name: config.yaml
+description: Configuration brought by centreon-gorgone-centreon-config
+configuration: !include /etc/centreon/config.d/*.yaml

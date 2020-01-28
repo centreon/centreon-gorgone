@@ -134,8 +134,7 @@ $ systemctl status centreon-gorgone
    Active: active (running) since Mon 2019-09-30 09:36:19 CEST; 2min 29s ago
  Main PID: 5168 (perl)
    CGroup: /system.slice/centreon-gorgone.service
-           ├─5168 /usr/bin/perl /usr/bin/gorgoned --config=/etc/centreon-gorgone/config.yaml 
-           --logfile=/var/log/centreon/gorgoned.log --severity=error
+           ├─5168 /usr/bin/perl /usr/bin/gorgoned --config=/etc/centreon-gorgone/config.yaml --logfile=/var/log/centreon/gorgoned.log --severity=error
            ├─5175 gorgone-dbcleaner
            ├─5182 gorgone-action
            ├─5187 gorgone-nodes

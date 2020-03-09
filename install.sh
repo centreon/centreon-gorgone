@@ -216,7 +216,7 @@ copy_and_modify_rights "$BASE_DIR/config/systemd" "gorgoned-sysconfig" "$SYSCONF
 copy_and_modify_rights "$BASE_DIR/config/logrotate" "gorgoned" "$LOGROTATE_D" "gorgoned" "775"
 copy_and_modify_rights "$BASE_DIR/packaging" "config.yaml" "$GORGONE_ETC" "config.yaml" "755"
 copy_and_modify_rights "$BASE_DIR" "gorgoned" "$GORGONE_BINDIR" "gorgoned" "755"
-copy_and_modify_rights "$BASE_DIR/contrib" "gorgone_config_init.pl" "/usr/local/bin" "gorgone_config_init.pl" "775"
+copy_and_modify_rights "$BASE_DIR/contrib" "gorgone_config_init.pl" "$GORGONE_BINDIR" "gorgone_config_init.pl" "775"
 
 ## Recursively copy perl files
 cp -R "$BASE_DIR/gorgone" "$GORGONE_PERL"

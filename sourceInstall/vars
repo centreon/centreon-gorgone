@@ -34,7 +34,7 @@ DEFAULT_GORGONE_LOG="/var/log/centreon-gorgone"
 DEFAULT_GORGONE_VARLIB="/var/lib/centreon-gorgone"
 DEFAULT_GORGONE_ETC="/etc/centreon-gorgone"
 DEFAULT_GORGONE_CONF_FILE="/config.yaml"
-DEFAULT_GORGONE_BINDIR="/usr/local/bin/"
+DEFAULT_GORGONE_BINDIR="/usr/bin/"
 
 # perl related paths
 DEFAULT_PERL_BIN="/usr/bin/perl"

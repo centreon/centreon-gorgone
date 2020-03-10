@@ -207,7 +207,7 @@ echo -e "\n$line"
 echo -e "\tAdding Gorgone user to the mandatory folders"
 echo -e "$line"
 
-change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$LOG_DIR"
+change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$GORGONE_LOG"
 change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$GORGONE_VARLIB"
 change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$GORGONE_ETC"
 

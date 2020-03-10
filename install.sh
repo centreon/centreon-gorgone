@@ -203,6 +203,14 @@ echo "$line"
 check_gorgone_group
 check_gorgone_user
 
+echo -e "\n$line"
+echo -e "\tAdding Gorgone user to the mandatory folders"
+echo -e "$line"
+
+change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$LOG_DIR"
+change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$GORGONE_VARLIB"
+change_rights "$GORGONE_USER" "$GORGONE_GROUP" "775" "$GORGONE_ETC"
+
 #----
 ## installation of Gorgone files
 #----
@@ -221,13 +229,13 @@ copy_and_modify_rights "$BASE_DIR/contrib" "gorgone_config_init.pl" "$GORGONE_BI
 ## Recursively copy perl files
 cp -R "$BASE_DIR/gorgone" "$GORGONE_PERL"
 ${CHMOD} -R "775" "$GORGONE_PERL"
-${CHOWN} -R $GORGONE_USER.$GORGONE_GROUP "$GORGONE_PERL"
+${CHOWN} -R "$GORGONE_USER.$GORGONE_GROUP" "$GORGONE_PERL"
 
 #----
 ## starting the service
 #----
 echo "$line"
-echo -e "\tStarting gorgoned service"
+echo -e "\tStarting gorgoned.service"
 echo "$line"
 
 ## check the OS and launch the service

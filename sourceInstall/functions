@@ -439,6 +439,30 @@ dir_test_create() {
 }
 
 #----
+## Change rights on specific file/folders
+#----
+change_rights() {
+    local user=$1
+    local group=$2
+    local rights=$3
+    local target=$4
+
+    ${CHOWN} -R $user.$group $target
+    if [ $? -eq 0 ] ; then
+        echo_success "Modify owner of $target" "$ok"
+    else
+        echo_failure "Modify owner of $target" "$fail"
+    fi
+
+    ${CHMOD} -R $rights $target
+    if [ $? -eq 0 ] ; then
+        echo_success "Modify rights of $target" "$ok"
+    else
+        echo_failure "Modify rights of $target" "$fail"
+    fi
+}
+
+#----
 ## Define where is Gorgone log folder
 #----
 locate_gorgone_logdir() {

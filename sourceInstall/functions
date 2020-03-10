@@ -447,14 +447,14 @@ change_rights() {
     local rights=$3
     local target=$4
 
-    ${CHOWN} -R $user.$group $target
+    ${CHOWN} $user.$group $target
     if [ $? -eq 0 ] ; then
         echo_success "Modify owner of $target" "$ok"
     else
         echo_failure "Modify owner of $target" "$fail"
     fi
 
-    ${CHMOD} -R $rights $target
+    ${CHMOD} $rights $target
     if [ $? -eq 0 ] ; then
         echo_success "Modify rights of $target" "$ok"
     else

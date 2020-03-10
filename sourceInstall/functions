@@ -54,20 +54,20 @@ SETCOLOR_NORMAL="\\033[0;39m"
 ## @return 1 	no
 #----
 yes_no_default() {
-	local message=$1
-	local default=${2:-$no}
-	local res="not_define"
-	while [ "$res" != "$yes" ] && [ "$res" != "$no" ] && [ ! -z "$res" ] ; do
-		echo -e "\n$message\n[y/n], default to [$default]:"
-		echo -en "> "
-		read res
-		[ -z "$res" ] && res="$default"
-	done
-	if [ "$res" = "$yes" ] ; then
-		return 0
-	else
-		return 1
-	fi
+    local message=$1
+    local default=${2:-$no}
+    local res="not_define"
+    while [ "$res" != "$yes" ] && [ "$res" != "$no" ] && [ ! -z "$res" ] ; do
+        echo -e "\n$message\n[y/n], default to [$default]:"
+        echo -en "> "
+        read res
+        [ -z "$res" ] && res="$default"
+    done
+    if [ "$res" = "$yes" ] ; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 #----
@@ -150,11 +150,11 @@ trim() {
 ## @Globals	LOG_FILE
 #----
 log() {
-	local program="$0"
-	local type="$1"
-	shift
-	local message="$@"
-	echo -e "[$program] - $type: $message" >> $LOG_FILE
+    local program="$0"
+    local type="$1"
+    shift
+    local message="$@"
+    echo -e "[$program] - $type: $message" >> $LOG_FILE
 }
 
 #----
@@ -165,16 +165,16 @@ log() {
 ## @Globals	PATH
 #----
 pathfind() {
-	OLDIFS="$IFS"
-	IFS=:
-	for p in $PATH; do
-		if [ -x "$p/$*" ] ; then
-			IFS="$OLDIFS"
-			return 0
-		fi
-	done
-	IFS="$OLDIFS"
-	return 1
+    OLDIFS="$IFS"
+    IFS=:
+    for p in $PATH; do
+        if [ -x "$p/$*" ] ; then
+            IFS="$OLDIFS"
+            return 0
+        fi
+    done
+    IFS="$OLDIFS"
+    return 1
 }
 
 #----
@@ -186,19 +186,19 @@ pathfind() {
 ## @Globals	PATH
 #----
 pathfind_ret() {
-	local bin=$1
-	local var_ref=$2
-	local OLDIFS="$IFS"
-	IFS=:
-	for p in $PATH; do
-		if [ -x "$p/$bin" ] ; then
-			IFS="$OLDIFS"
-			eval $var_ref=$p
-			return 0
-		fi
-	done
-	IFS="$OLDIFS"
-	return 1
+    local bin=$1
+    local var_ref=$2
+    local OLDIFS="$IFS"
+    IFS=:
+    for p in $PATH; do
+        if [ -x "$p/$bin" ] ; then
+            IFS="$OLDIFS"
+            eval $var_ref=$p
+            return 0
+        fi
+    done
+    IFS="$OLDIFS"
+    return 1
 }
 
 #----
@@ -209,22 +209,22 @@ pathfind_ret() {
 ## @Globals	GREP, CAT, SED, CHMOD, CHOWN
 #----
 define_specific_binary_vars() {
-	local vars_bin="GREP CAT SED CHMOD CHOWN"
-	local var_bin_tolower=""
-	for var_bin in $vars_bin ; do
-		if [ -z $(eval echo \$$var_bin) ] ; then
-			var_bin_tolower="$(echo $var_bin | tr [:upper:] [:lower:])"
-			pathfind_ret "$var_bin_tolower" "$(echo -n $var_bin)"
-			if [ "$?" -eq 0 ] ; then
-				eval "$var_bin='$(eval echo \$$var_bin)/$var_bin_tolower'"
-				export $(echo $var_bin)
-				log "PATH" "$var_bin=$(eval echo \$$var_bin)"
-			else
-				return 1
-			fi
-		fi
-	done
-	return 0
+    local vars_bin="GREP CAT SED CHMOD CHOWN"
+    local var_bin_tolower=""
+    for var_bin in $vars_bin ; do
+        if [ -z $(eval echo \$$var_bin) ] ; then
+            var_bin_tolower="$(echo $var_bin | tr [:upper:] [:lower:])"
+            pathfind_ret "$var_bin_tolower" "$(echo -n $var_bin)"
+            if [ "$?" -eq 0 ] ; then
+                eval "$var_bin='$(eval echo \$$var_bin)/$var_bin_tolower'"
+                export $(echo $var_bin)
+                log "PATH" "$var_bin=$(eval echo \$$var_bin)"
+            else
+                return 1
+            fi
+        fi
+    done
+    return 0
 }
 
 #----
@@ -234,17 +234,17 @@ define_specific_binary_vars() {
 ## @Globals	INSTALL_DIR
 #----
 check_disk_space() {
-	local min_space="35584"
-	local free_space=""
-	local tmp_dir=""
-	dest_dir=$(dirname $INSTALL_DIR)
-	free_space=$(df -P $dest_dir | tail -1 | awk '{print $4}')
-	if [ "$free_space" -lt "$min_space" ] ; then
-		echo_failure "No space left on : $dest_dir  (<$min_space Ko)" "$fail"
-		return 1
-	else
-		return 0
-	fi
+    local min_space="35584"
+    local free_space=""
+    local tmp_dir=""
+    dest_dir=$(dirname $INSTALL_DIR)
+    free_space=$(df -P $dest_dir | tail -1 | awk '{print $4}')
+    if [ "$free_space" -lt "$min_space" ] ; then
+        echo_failure "No space left on : $dest_dir  (<$min_space Ko)" "$fail"
+        return 1
+    else
+        return 0
+    fi
 }
 
 #----
@@ -256,29 +256,29 @@ check_disk_space() {
 ## @return 0	end
 #----
 answer_with_testdir() {
-	local message=$1
-	local default=$2
-	local var_ref=$3
-	local res="not_defined"
-	local first=0
-	while [ ! -d "$res" ] ; do
-		[ $first -eq 1 ] && echo_passed "$res is not a directory or does not exist" "$critical"
-		echo -e "\n$message"
-		[ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
-		echo -en "> "
-		read res
-		if [ -z "$res" ] ; then
-			[ $default != "NO_DEFAULT" ] && res=$default
-		fi
-		if [ -z ${res#/} ] ; then
-			echo_passed  "You cannot select the filesystem root folder"
-			res="not_defined"
-		else
-			first=1
-		fi
-	done
-	eval $var_ref=$res
-	return 0
+    local message=$1
+    local default=$2
+    local var_ref=$3
+    local res="not_defined"
+    local first=0
+    while [ ! -d "$res" ] ; do
+        [ $first -eq 1 ] && echo_passed "$res is not a directory or does not exist" "$critical"
+        echo -e "\n$message"
+        [ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
+        echo -en "> "
+        read res
+        if [ -z "$res" ] ; then
+            [ $default != "NO_DEFAULT" ] && res=$default
+        fi
+        if [ -z ${res#/} ] ; then
+            echo_passed  "You cannot select the filesystem root folder"
+            res="not_defined"
+        else
+            first=1
+        fi
+    done
+    eval $var_ref=$res
+    return 0
 }
 
 #----
@@ -303,40 +303,40 @@ allow_creation_of_missing_folders() {
 ## @return 0	end
 #----
 answer_with_createdir() {
-	local message=$1
-	local default=$2
-	local var_ref=$3
-	local res="not_defined"
-	local first=0
-	while [ ! -d "$res" ] ; do
-		[ $first -eq 1 ] && echo_passed "Directory $res does not exists." "$critical"
-		echo -e "\n$message"
-		[ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
-		echo -en "> "
-		read res
-		if [ -z "$res" ] ; then
-			[ "$default" != "NO_DEFAULT" ] && res=$default
-		fi
-		if [ -z "${res#/}" -o "$yes" = "$res" -o "$no" = "$res" ] ; then
-			echo_passed  "You cannot select the filesystem root folder"
-			res="not_defined"
-		else
-			first=1
-			if [ $CREATION_ALLOWED -eq 0 ] ; then
-			    [ -d "$res" ] && break
-			    yes_no_default "Do you want to create this directory ? [$res]"
-			fi
-			if [ $? -eq 0 ] || [ $CREATION_ALLOWED -eq 1 ] ; then
-			    mkdir -p $res
-			    log "INFO" "Creating $res"
-			elif [ $? -ne 0 ] ; then
-			    echo_passed "Could not create directory." "$critical"
-			    #continue
+    local message=$1
+    local default=$2
+    local var_ref=$3
+    local res="not_defined"
+    local first=0
+    while [ ! -d "$res" ] ; do
+        [ $first -eq 1 ] && echo_passed "Directory $res does not exists." "$critical"
+        echo -e "\n$message"
+        [ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
+        echo -en "> "
+        read res
+        if [ -z "$res" ] ; then
+            [ "$default" != "NO_DEFAULT" ] && res=$default
+        fi
+        if [ -z "${res#/}" -o "$yes" = "$res" -o "$no" = "$res" ] ; then
+            echo_passed  "You cannot select the filesystem root folder"
+            res="not_defined"
+        else
+            first=1
+            if [ $CREATION_ALLOWED -eq 0 ] ; then
+                [ -d "$res" ] && break
+                yes_no_default "Do you want to create this directory ? [$res]"
             fi
-		fi
-	done
-	eval $var_ref=$res
-	return 0
+            if [ $? -eq 0 ] || [ $CREATION_ALLOWED -eq 1 ] ; then
+                mkdir -p $res
+                log "INFO" "Creating $res"
+            elif [ $? -ne 0 ] ; then
+                echo_passed "Could not create directory." "$critical"
+                #continue
+            fi
+        fi
+    done
+    eval $var_ref=$res
+    return 0
 }
 
 #----
@@ -348,24 +348,24 @@ answer_with_createdir() {
 ## @return 0	end
 #----
 answer_with_testfile() {
-	local message=$1
-	local default=$2
-	local var_ref=$3
-	local res="not_define"
-	local first=0
-	while [ ! -f "$res" ] ; do
-		[ $first -eq 1 ] && echo_passed "$res is not a valid file." "$critical"
-		echo -e "\n$message"
-		[ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
-		echo -en "> "
-		read res
-		if [ -z "$res" ] ; then
-			[ "$default" != "NO_DEFAULT" ] && res=$default
-		fi
-		first=1
-	done
-	eval $var_ref=$res
-	return 0
+    local message=$1
+    local default=$2
+    local var_ref=$3
+    local res="not_define"
+    local first=0
+    while [ ! -f "$res" ] ; do
+        [ $first -eq 1 ] && echo_passed "$res is not a valid file." "$critical"
+        echo -e "\n$message"
+        [ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
+        echo -en "> "
+        read res
+        if [ -z "$res" ] ; then
+            [ "$default" != "NO_DEFAULT" ] && res=$default
+        fi
+        first=1
+    done
+    eval $var_ref=$res
+    return 0
 }
 
 #----
@@ -376,15 +376,15 @@ answer_with_testfile() {
 ## @return 1 	file does not exist
 #----
 testfile_clean() {
-	local file="$1"
-	local var="$2"
-	[ -z "$file" ] && return 1
-	if [ ! -e "$file" ] ; then
-		eval $var=""
-		return 1
-	else
-		return 0
-	fi
+    local file="$1"
+    local var="$2"
+    [ -z "$file" ] && return 1
+    if [ ! -e "$file" ] ; then
+        eval $var=""
+        return 1
+    else
+        return 0
+    fi
 }
 
 #----
@@ -395,15 +395,15 @@ testfile_clean() {
 ## @return 1 directory does not exist
 #----
 testdir_clean() {
-	local dir="$1"
-	local var="$2"
-	[ -z "$dir" ] && return 1
-	if [ ! -d "$dir" ] ; then
-		eval $var=""
-		return 1
-	else
-		return 0
-	fi
+    local dir="$1"
+    local var="$2"
+    [ -z "$dir" ] && return 1
+    if [ ! -d "$dir" ] ; then
+        eval $var=""
+        return 1
+    else
+        return 0
+    fi
 }
 
 #----
@@ -412,11 +412,11 @@ testdir_clean() {
 ## @param	value2
 #----
 test_answer() {
-	if [ ! -z $2 ] ; then
-		if [ $2 != "" ] ; then
-			eval $1=$2
-		fi
-	fi
+    if [ ! -z $2 ] ; then
+        if [ $2 != "" ] ; then
+            eval $1=$2
+        fi
+    fi
 }
 
 #----
@@ -426,54 +426,54 @@ test_answer() {
 ## @return 1 on failure
 #----
 dir_test_create() {
-	local dirname="$1"
-	if [ ! -d "$1" ] ; then
-		mkdir -p "$dirname"
-		if [ $? -ne 0 ] ; then
-			echo_failure "Could not create folder $dirname" "$fail"
-			return 1
-		fi
-		echo_success "Creating folder $dirname" "$ok"
-	fi
-	return 0
+    local dirname="$1"
+    if [ ! -d "$1" ] ; then
+        mkdir -p "$dirname"
+        if [ $? -ne 0 ] ; then
+            echo_failure "Could not create folder $dirname" "$fail"
+            return 1
+        fi
+        echo_success "Creating folder $dirname" "$ok"
+    fi
+    return 0
 }
 
 #----
 ## Define where is Gorgone log folder
 #----
 locate_gorgone_logdir() {
-	if [ -n "$GORGONE_LOG" ] ; then
-		dir_test_create "$GORGONE_LOG"
-		if [ $? -ne 0 ] ; then
-			GORGONE_LOG=""
-		fi
-	fi
-	if [ -z "$GORGONE_LOG" ] ; then
-		answer_with_createdir "Where is your Gorgone log folder" "$DEFAULT_GORGONE_LOG" "GORGONE_LOG"
-		echo_success "Path $GORGONE_LOG" "$ok"
-	fi
-	GORGONE_LOG=`trim ${GORGONE_LOG%/}`
-	export GORGONE_LOG
-	log "VALUE OF" "GORGONE_LOG folder = $GORGONE_LOG"
+    if [ -n "$GORGONE_LOG" ] ; then
+        dir_test_create "$GORGONE_LOG"
+        if [ $? -ne 0 ] ; then
+            GORGONE_LOG=""
+        fi
+    fi
+    if [ -z "$GORGONE_LOG" ] ; then
+        answer_with_createdir "Where is your Gorgone log folder" "$DEFAULT_GORGONE_LOG" "GORGONE_LOG"
+        echo_success "Path $GORGONE_LOG" "$ok"
+    fi
+    GORGONE_LOG=`trim ${GORGONE_LOG%/}`
+    export GORGONE_LOG
+    log "VALUE OF" "GORGONE_LOG folder = $GORGONE_LOG"
 }
 
 #----
 ## Define where is Gorgone database folder
 #----
 locate_gorgone_varlib() {
-	if [ -n "$GORGONE_VARLIB" ] ; then
-		dir_test_create "$GORGONE_VARLIB"
-		if [ $? -ne 0 ] ; then
-			GORGONE_VARLIB=""
-		fi
-	fi
-	if [ -z "$GORGONE_VARLIB" ] ; then
-		answer_with_createdir "Where is your Gorgone database folder" "$DEFAULT_GORGONE_VARLIB" "GORGONE_VARLIB"
-		echo_success "Path $GORGONE_VARLIB" "$ok"
-	fi
-	GORGONE_VARLIB=`trim ${GORGONE_VARLIB%/}`
-	export GORGONE_VARLIB
-	log "VALUE OF" "GORGONE_VARLIB folder = $GORGONE_VARLIB"
+    if [ -n "$GORGONE_VARLIB" ] ; then
+        dir_test_create "$GORGONE_VARLIB"
+        if [ $? -ne 0 ] ; then
+            GORGONE_VARLIB=""
+        fi
+    fi
+    if [ -z "$GORGONE_VARLIB" ] ; then
+        answer_with_createdir "Where is your Gorgone database folder" "$DEFAULT_GORGONE_VARLIB" "GORGONE_VARLIB"
+        echo_success "Path $GORGONE_VARLIB" "$ok"
+    fi
+    GORGONE_VARLIB=`trim ${GORGONE_VARLIB%/}`
+    export GORGONE_VARLIB
+    log "VALUE OF" "GORGONE_VARLIB folder = $GORGONE_VARLIB"
 }
 
 
@@ -481,59 +481,59 @@ locate_gorgone_varlib() {
 ## Define where is Gorgone config (etc) folder
 #----
 locate_gorgone_etcdir() {
-	if [ -n "$GORGONE_ETC" ] ; then
-		dir_test_create "$GORGONE_ETC"
-		if [ $? -ne 0 ] ; then
-			GORGONE_ETC=""
-		fi
-	fi
-	if [ -z "$GORGONE_ETC" ] ; then
-		answer_with_createdir "Where is your Gorgone config (etc) folder" "$DEFAULT_GORGONE_ETC" "GORGONE_ETC"
-		echo_success "Path $GORGONE_ETC" "$ok"
-	fi
-	GORGONE_ETC=`trim ${GORGONE_ETC%/}`
-	export GORGONE_ETC
-	log "VALUE OF" "GORGONE_ETC folder = $GORGONE_ETC"
-	# create the sub-folder for specific config files
-	dir_test_create "$GORGONE_ETC/config.d"
+    if [ -n "$GORGONE_ETC" ] ; then
+        dir_test_create "$GORGONE_ETC"
+        if [ $? -ne 0 ] ; then
+            GORGONE_ETC=""
+        fi
+    fi
+    if [ -z "$GORGONE_ETC" ] ; then
+        answer_with_createdir "Where is your Gorgone config (etc) folder" "$DEFAULT_GORGONE_ETC" "GORGONE_ETC"
+        echo_success "Path $GORGONE_ETC" "$ok"
+    fi
+    GORGONE_ETC=`trim ${GORGONE_ETC%/}`
+    export GORGONE_ETC
+    log "VALUE OF" "GORGONE_ETC folder = $GORGONE_ETC"
+    # create the sub-folder for specific config files
+    dir_test_create "$GORGONE_ETC/config.d"
 }
 
 #----
 ## Define where is Gorgone user's bin folder
 #----
 locate_gorgone_bindir() {
-	if [ -n "$GORGONE_BINDIR" ] ; then
-		dir_test_create "$GORGONE_BINDIR"
-		if [ $? -ne 0 ] ; then
-			GORGONE_BINDIR=""
-		fi
-	fi
-	if [ -z "$GORGONE_BINDIR" ] ; then
-		answer_with_createdir "Where are your Gorgone user's folder" "$DEFAULT_GORGONE_BINDIR" "GORGONE_BINDIR"
-		echo_success "Path $GORGONE_BINDIR" "$ok"
-	fi
-	GORGONE_BINDIR=`trim ${GORGONE_BINDIR%/}`
-	export GORGONE_BINDIR
-	log "VALUE OF" "GORGONE_PERL folder = $GORGONE_BINDIR"
+    if [ -n "$GORGONE_BINDIR" ] ; then
+        dir_test_create "$GORGONE_BINDIR"
+        if [ $? -ne 0 ] ; then
+            GORGONE_BINDIR=""
+        fi
+    fi
+    if [ -z "$GORGONE_BINDIR" ] ; then
+        answer_with_createdir "Where are your Gorgone user's folder" "$DEFAULT_GORGONE_BINDIR" "GORGONE_BINDIR"
+        echo_success "Path $GORGONE_BINDIR" "$ok"
+    fi
+    GORGONE_BINDIR=`trim ${GORGONE_BINDIR%/}`
+    export GORGONE_BINDIR
+    log "VALUE OF" "GORGONE_PERL folder = $GORGONE_BINDIR"
 }
 
 #----
 ## Define where is Gorgone perl folder
 #----
 locate_gorgone_perldir() {
-	if [ -n "$GORGONE_PERL" ] ; then
-		dir_test_create "$GORGONE_PERL"
-		if [ $? -ne 0 ] ; then
-			GORGONE_PERL=""
-		fi
-	fi
-	if [ -z "$GORGONE_PERL" ] ; then
-		answer_with_createdir "Where are your Gorgone's perl files" "$DEFAULT_GORGONE_PERL" "GORGONE_PERL"
-		echo_success "Path $GORGONE_PERL" "$ok"
-	fi
-	GORGONE_PERL=`trim ${GORGONE_PERL%/}`
-	export GORGONE_PERL
-	log "VALUE OF" "GORGONE_PERL folder = $GORGONE_PERL"
+    if [ -n "$GORGONE_PERL" ] ; then
+        dir_test_create "$GORGONE_PERL"
+        if [ $? -ne 0 ] ; then
+            GORGONE_PERL=""
+        fi
+    fi
+    if [ -z "$GORGONE_PERL" ] ; then
+        answer_with_createdir "Where are your Gorgone's perl files" "$DEFAULT_GORGONE_PERL" "GORGONE_PERL"
+        echo_success "Path $GORGONE_PERL" "$ok"
+    fi
+    GORGONE_PERL=`trim ${GORGONE_PERL%/}`
+    export GORGONE_PERL
+    log "VALUE OF" "GORGONE_PERL folder = $GORGONE_PERL"
 }
 
 #----
@@ -541,38 +541,38 @@ locate_gorgone_perldir() {
 ## find perl in PATH
 #----
 locate_perl() {
-	testfile_clean "$BIN_PERL" "BIN_PERL"
-	if [ -z "$BIN_PERL" ] ; then
-		pathfind_ret "perl" "BIN_PERL"
-		if [ "$?" -ne 0 ] ; then
-			answer_with_testfile "Where is perl" "$DEFAULT_BIN_PERL" "BIN_PERL"
-		else
-			BIN_PERL="$BIN_PERL/perl"
-		fi
-		echo_success "$BIN_PERL" "$ok"
-	fi
-	BIN_PERL=${BIN_PERL%/}
-	export BIN_PERL
-	log "VALUE OF" "BIN_PERL = $BIN_PERL"
+    testfile_clean "$BIN_PERL" "BIN_PERL"
+    if [ -z "$BIN_PERL" ] ; then
+        pathfind_ret "perl" "BIN_PERL"
+        if [ "$?" -ne 0 ] ; then
+            answer_with_testfile "Where is perl" "$DEFAULT_BIN_PERL" "BIN_PERL"
+        else
+            BIN_PERL="$BIN_PERL/perl"
+        fi
+        echo_success "$BIN_PERL" "$ok"
+    fi
+    BIN_PERL=${BIN_PERL%/}
+    export BIN_PERL
+    log "VALUE OF" "BIN_PERL = $BIN_PERL"
 }
 
 #----
 ## Define where is your cron.d directory
 #----
 locate_cron_d() {
-	testdir_clean "$CRON_D" "CRON_D"
-	if [ -z "$CRON_D" ] ; then
-		if [ -d "/etc/cron.d" ] ; then
-			CRON_D="/etc/cron.d"
-		# Add most of init.d
-		else
-			answer_with_testdir "Where is your cron.d directory ?" "$DEFAULT_CRON_D" "CRON_D"
-			echo_success "Location $CRON_D" "$ok"
-		fi
-	fi
-	CRON_D=${CRON_D%/}
-	export CRON_D
-	log "VALUE OF" "CRON_D = $CRON_D"
+    testdir_clean "$CRON_D" "CRON_D"
+    if [ -z "$CRON_D" ] ; then
+        if [ -d "/etc/cron.d" ] ; then
+            CRON_D="/etc/cron.d"
+            # Add most of init.d
+        else
+            answer_with_testdir "Where is your cron.d directory ?" "$DEFAULT_CRON_D" "CRON_D"
+            echo_success "Location $CRON_D" "$ok"
+        fi
+    fi
+    CRON_D=${CRON_D%/}
+    export CRON_D
+    log "VALUE OF" "CRON_D = $CRON_D"
 }
 
 #----
@@ -580,19 +580,19 @@ locate_cron_d() {
 ## @Globals	LOGROTATE_D, DEFAULT_LOGROTATE_D
 #----
 locate_logrotate_d() {
-	testdir_clean "$LOGROTATE_D" "LOGROTATE_D"
-	if [ -z "$LOGROTATE_D" ] ; then
-		if [ -d "/etc/logrotate.d" ] ; then
-			LOGROTATE_D="/etc/logrotate.d"
-		# Add most of init.d
-		else
-			answer_with_testdir "Where is your logrotate.d folder ?" "$DEFAULT_LOGROTATE_D" "LOGROTATE_D"
-			echo_success "Path $LOGROTATE_D" "$ok"
-		fi
-	fi
-	LOGROTATE_D=`trim ${LOGROTATE_D%/}`
-	export LOGROTATE_D
-	log "VALUE OF" "LOGROTATE_D = $LOGROTATE_D"
+    testdir_clean "$LOGROTATE_D" "LOGROTATE_D"
+    if [ -z "$LOGROTATE_D" ] ; then
+        if [ -d "/etc/logrotate.d" ] ; then
+            LOGROTATE_D="/etc/logrotate.d"
+            # Add most of init.d
+        else
+            answer_with_testdir "Where is your logrotate.d folder ?" "$DEFAULT_LOGROTATE_D" "LOGROTATE_D"
+            echo_success "Path $LOGROTATE_D" "$ok"
+        fi
+    fi
+    LOGROTATE_D=`trim ${LOGROTATE_D%/}`
+    export LOGROTATE_D
+    log "VALUE OF" "LOGROTATE_D = $LOGROTATE_D"
 }
 
 #----
@@ -600,19 +600,19 @@ locate_logrotate_d() {
 ## @Globals	SYSTEM_D, DEFAULT_SYSTEM_D
 #----
 locate_system_d() {
-	testdir_clean "$SYSTEM_D" "SYSTEM_D"
-	if [ -z "$SYSTEM_D" ] ; then
-		if [ -d "/etc/systemd/system" ] ; then
-			SYSTEM_D="/etc/systemd/system"
-		# Add most of init.d
-		else
-			answer_with_testdir "Where is your systemd folder ?" "$DEFAULT_SYSTEM_D" "SYSTEM_D"
-			echo_success "Path $SYSTEM_D" "$ok"
-		fi
-	fi
-	SYSTEM_D=`trim ${SYSTEM_D%/}`
-	export SYSTEM_D
-	log "VALUE OF" "SYSTEM_D = $SYSTEM_D"
+    testdir_clean "$SYSTEM_D" "SYSTEM_D"
+    if [ -z "$SYSTEM_D" ] ; then
+        if [ -d "/etc/systemd/system" ] ; then
+            SYSTEM_D="/etc/systemd/system"
+            # Add most of init.d
+        else
+            answer_with_testdir "Where is your systemd folder ?" "$DEFAULT_SYSTEM_D" "SYSTEM_D"
+            echo_success "Path $SYSTEM_D" "$ok"
+        fi
+    fi
+    SYSTEM_D=`trim ${SYSTEM_D%/}`
+    export SYSTEM_D
+    log "VALUE OF" "SYSTEM_D = $SYSTEM_D"
 }
 
 #----
@@ -620,19 +620,19 @@ locate_system_d() {
 ## @Globals	SYSCONFIG, DEFAULT_SYSCONFIG
 #----
 locate_sysconfig() {
-	testdir_clean "$SYSCONFIG" "SYSCONFIG"
-	if [ -z "$SYSCONFIG" ] ; then
-		if [ -d "/etc/sysconfig" ] ; then
-			SYSCONFIG="/etc/sysconfig"
-		# Add most of init.d
-		else
-			answer_with_testdir "Where is your sysconfig folder ?" "$DEFAULT_SYSCONFIG" "SYSCONFIG"
-			echo_success "Path $SYSCONFIG" "$ok"
-		fi
-	fi
-	SYSCONFIG=`trim ${SYSCONFIG%/}`
-	export SYSCONFIG
-	log "VALUE OF" "SYSCONFIG = $SYSCONFIG"
+    testdir_clean "$SYSCONFIG" "SYSCONFIG"
+    if [ -z "$SYSCONFIG" ] ; then
+        if [ -d "/etc/sysconfig" ] ; then
+            SYSCONFIG="/etc/sysconfig"
+            # Add most of init.d
+        else
+            answer_with_testdir "Where is your sysconfig folder ?" "$DEFAULT_SYSCONFIG" "SYSCONFIG"
+            echo_success "Path $SYSCONFIG" "$ok"
+        fi
+    fi
+    SYSCONFIG=`trim ${SYSCONFIG%/}`
+    export SYSCONFIG
+    log "VALUE OF" "SYSCONFIG = $SYSCONFIG"
 }
 
 #----
@@ -641,37 +641,37 @@ locate_sysconfig() {
 #----
 check_gorgone_group()
 {
-	if [ -n "$GORGONE_GROUP" ] ; then
-		group_test "$GORGONE_GROUP"
-		if [ $? -ne 0 ] ; then
-			group_create "$GORGONE_GROUP"
-			if [ $? -ne 0 ] ; then
-				GORGONE_GROUP=""
-			fi
-		fi
-	fi
-	if [ -z "$GORGONE_GROUP" ] ; then
-		answer_with_creategroup "What is the Gorgone group ?" "$DEFAULT_GORGONE_GROUP" "GORGONE_GROUP"
-	fi
-	log "VALUE OF" "GORGONE_GROUP = $GORGONE_GROUP"
-	return 0
+    if [ -n "$GORGONE_GROUP" ] ; then
+        group_test "$GORGONE_GROUP"
+        if [ $? -ne 0 ] ; then
+            group_create "$GORGONE_GROUP"
+            if [ $? -ne 0 ] ; then
+                GORGONE_GROUP=""
+            fi
+        fi
+    fi
+    if [ -z "$GORGONE_GROUP" ] ; then
+        answer_with_creategroup "What is the Gorgone group ?" "$DEFAULT_GORGONE_GROUP" "GORGONE_GROUP"
+    fi
+    log "VALUE OF" "GORGONE_GROUP = $GORGONE_GROUP"
+    return 0
 }
 
 group_test() {
-	grep "^$1:" /etc/group &>/dev/null
-	return $?
+    grep "^$1:" /etc/group &>/dev/null
+    return $?
 }
 
 group_create() {
-	local groupname="$1"
-	groupadd -r "$groupname"
-	if [ $? -ne 0 ] ; then
-		echo_failure "Could not create group $groupname" "$fail"
-		return 1
-	fi
-	echo_success "Creating group $groupname" "$ok"
-	#log "VALUE OF" "Creating group $groupname"
-	return 0
+    local groupname="$1"
+    groupadd -r "$groupname"
+    if [ $? -ne 0 ] ; then
+        echo_failure "Could not create group $groupname" "$fail"
+        return 1
+    fi
+    echo_success "Creating group $groupname" "$ok"
+    log "VALUE OF" "Creating group $groupname"
+    return 0
 }
 
 #----
@@ -682,40 +682,40 @@ group_create() {
 ## @return 0	end
 #----
 answer_with_creategroup() {
-	local message=$1
-	local default=$2
-	local var_ref=$3
-	local res="not_def"
-	local first=0
-	local group_tested=1
-	while [ "$group_tested" -ne 0 ] ; do
-		[ $first -eq 1 ] && echo_passed "The group $res does not exist" "$critical"
-		echo -e "\n$message"
-		[ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
-		echo -en "> "
-		read res
-		if [ -z "$res" ] ; then
-			[ "$default" != "NO_DEFAULT" ] && res=$default
-		fi
-		first=1
-		if [ -n "$res" ] ; then
-			group_test "$res"
-			if [ $? -ne 0 ] ; then
-			    if [ $CREATION_ALLOWED -eq 0 ] ; then
-				    yes_no_default "Do you want to create this group ? [$res]"
+    local message=$1
+    local default=$2
+    local var_ref=$3
+    local res="not_def"
+    local first=0
+    local group_tested=1
+    while [ "$group_tested" -ne 0 ] ; do
+        [ $first -eq 1 ] && echo_passed "The group $res does not exist" "$critical"
+        echo -e "\n$message"
+        [ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
+        echo -en "> "
+        read res
+        if [ -z "$res" ] ; then
+            [ "$default" != "NO_DEFAULT" ] && res=$default
+        fi
+        first=1
+        if [ -n "$res" ] ; then
+            group_test "$res"
+            if [ $? -ne 0 ] ; then
+                if [ $CREATION_ALLOWED -eq 0 ] ; then
+                    yes_no_default "Do you want to create this group ? [$res]"
                 fi
-				if [ $? -eq 0 ] || [ $CREATION_ALLOWED -eq 1 ] ; then
-					group_create "$res"
-				fi
-			fi
-		else
-			res="not_def"
-		fi
-		group_test "$res"
-		group_tested=$?
-	done
-	eval $var_ref=$res
-	return 0
+                if [ $? -eq 0 ] || [ $CREATION_ALLOWED -eq 1 ] ; then
+                    group_create "$res"
+                fi
+            fi
+        else
+            res="not_def"
+        fi
+        group_test "$res"
+        group_tested=$?
+    done
+    eval $var_ref=$res
+    return 0
 }
 
 #----
@@ -724,43 +724,43 @@ answer_with_creategroup() {
 #----
 check_gorgone_user()
 {
-	local groups="$GORGONE_GROUP"
-	local description="Gorgone user"
-	local home="$GORGONE_VARLIB"
-	if [ -n "$GORGONE_USER" ] ; then
-		user_test "$GORGONE_USER"
-		if [ $? -ne 0 ] ; then
-			user_create "$GORGONE_USER" "$groups" "$description" "$home"
-			if [ $? -ne 0 ] ; then
-				GORGONE_USER=""
-			fi
-		fi
-	fi
-	if [ -z "$GORGONE_USER" ] ; then
-		answer_with_createuser "What is the Gorgone user ?" "$DEFAULT_GORGONE_USER" "GORGONE_USER" "$groups" "$description" "$home"
-	fi
-	log "VALUE OF" "GORGONE_USER = $GORGONE_USER"
-	return 0
+    local groups="$GORGONE_GROUP"
+    local description="Gorgone user"
+    local home="$GORGONE_VARLIB"
+    if [ -n "$GORGONE_USER" ] ; then
+        user_test "$GORGONE_USER"
+        if [ $? -ne 0 ] ; then
+            user_create "$GORGONE_USER" "$groups" "$description" "$home"
+            if [ $? -ne 0 ] ; then
+                GORGONE_USER=""
+            fi
+        fi
+    fi
+    if [ -z "$GORGONE_USER" ] ; then
+        answer_with_createuser "What is the Gorgone user ?" "$DEFAULT_GORGONE_USER" "GORGONE_USER" "$groups" "$description" "$home"
+    fi
+    log "VALUE OF" "GORGONE_USER = $GORGONE_USER"
+    return 0
 }
 
 user_test() {
-	grep "^$1:" /etc/passwd &>/dev/null
-	return $?
+    grep "^$1:" /etc/passwd &>/dev/null
+    return $?
 }
 
 user_create() {
-	local username="$1"
-	local groupname="$2"
-	local description="$3"
-	local home="$4"
-	useradd -r -c "$description" -s "/bin/sh" -d "$home" -g "$groupname" "$username"
-	if [ $? -ne 0 ] ; then
-		echo_failure "Could not create user $username" "$fail"
-		return 1
-	fi
-	echo_success "Creating user $username ($description)" "$ok"
-	#log "INFO" "Creating user $username"
-	return 0
+    local username="$1"
+    local groupname="$2"
+    local description="$3"
+    local home="$4"
+    useradd -r -c "$description" -s "/bin/sh" -d "$home" -g "$groupname" "$username"
+    if [ $? -ne 0 ] ; then
+        echo_failure "Could not create user $username" "$fail"
+        return 1
+    fi
+    echo_success "Creating user $username ($description)" "$ok"
+    log "INFO" "Creating user $username"
+    return 0
 }
 
 #----
@@ -771,43 +771,43 @@ user_create() {
 ## @return 0	end
 #----
 answer_with_createuser() {
-	local message=$1
-	local default=$2
-	local var_ref=$3
-	local groups="$4"
-	local description="$5"
-	local home="$6"
-	local res="not_def"
-	local first=0
-	local user_tested=1
-	while [ "$user_tested" -ne 0 ] ; do
-		[ $first -eq 1 ] && echo_passed "The user $res does not exist" "$critical"
-		echo -e "\n$message"
-		[ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
-		echo -en "> "
-		read res
-		if [ -z "$res" ] ; then
-			[ "$default" != "NO_DEFAULT" ] && res=$default
-		fi
-		first=1
-		if [ -n "$res" ] ; then
-			user_test "$res"
-			if [ $? -ne 0 ] ; then
-			    if [ $CREATION_ALLOWED -eq 0 ] ; then
-				    yes_no_default "Do you want to create this user ? [$res]"
+    local message=$1
+    local default=$2
+    local var_ref=$3
+    local groups="$4"
+    local description="$5"
+    local home="$6"
+    local res="not_def"
+    local first=0
+    local user_tested=1
+    while [ "$user_tested" -ne 0 ] ; do
+        [ $first -eq 1 ] && echo_passed "The user $res does not exist" "$critical"
+        echo -e "\n$message"
+        [ "$default" != "NO_DEFAULT" ] && echo -e "default to [$default]"
+        echo -en "> "
+        read res
+        if [ -z "$res" ] ; then
+            [ "$default" != "NO_DEFAULT" ] && res=$default
+        fi
+        first=1
+        if [ -n "$res" ] ; then
+            user_test "$res"
+            if [ $? -ne 0 ] ; then
+                if [ $CREATION_ALLOWED -eq 0 ] ; then
+                    yes_no_default "Do you want to create this user ? [$res]"
                 fi
                 if [ $? -eq 0 ]  || [ $CREATION_ALLOWED -eq 1 ] ; then
-					user_create "$res" "$groups" "$description" "$home"
-				fi
-			fi
-		else
-			res="not_def"
-		fi
-		user_test "$res"
-		user_tested=$?
-	done
-	eval $var_ref=$res
-	return 0
+                    user_create "$res" "$groups" "$description" "$home"
+                fi
+            fi
+        else
+            res="not_def"
+        fi
+        user_test "$res"
+        user_tested=$?
+    done
+    eval $var_ref=$res
+    return 0
 }
 
 #----
@@ -819,35 +819,35 @@ answer_with_createuser() {
 ## @return 1	install service fail
 #----
 install_init_service() {
-	# how to find methode to install in rc.d directory a correct link ?
-	# debian	update-rc.d
-	# redhat	chkconfig
-	# Suse		chkconfig
-	# FreeBSD	add ${service}_enable=YES in /etc/rc.conf
-	local service=$1
+    # how to find methode to install in rc.d directory a correct link ?
+    # debian	update-rc.d
+    # redhat	chkconfig
+    # Suse		chkconfig
+    # FreeBSD	add ${service}_enable=YES in /etc/rc.conf
+    local service=$1
 
-	if [ -z $2 ]; then
-	    OS=""
-	    find_OS "OS"
+    if [ -z $2 ]; then
+        OS=""
+        find_OS "OS"
     else
-	    OS=$2
+        OS=$2
     fi
 
-	if [ "$OS" = "DEBIAN" ] ; then
-		systemctl start $service
-		systemctl enable $service
-	elif [ "$OS" = "SUSE" ] ; then
-		chkconfig --add $service
-	elif [ "$OS" = "REDHAT" ] ; then
-	    systemctl start $service
-		systemctl enable $service
-	elif [ "$OS" = "FREEBSD" ] ; then
-		echo_info "You must configure your /etc/rc.conf with: ${service}_enable=YES"
-	else
-		echo_passed "Impossible to install your run level for $service" "$fail"
-		return 1
-	fi
-	return 0
+    if [ "$OS" = "DEBIAN" ] ; then
+        systemctl start $service
+        systemctl enable $service
+    elif [ "$OS" = "SUSE" ] ; then
+        chkconfig --add $service
+    elif [ "$OS" = "REDHAT" ] ; then
+        systemctl start $service
+        systemctl enable $service
+    elif [ "$OS" = "FREEBSD" ] ; then
+        echo_info "You must configure your /etc/rc.conf with: ${service}_enable=YES"
+    else
+        echo_passed "Impossible to install your run level for $service" "$fail"
+        return 1
+    fi
+    return 0
 }
 
 #----
@@ -859,53 +859,52 @@ install_init_service() {
 ## @return 1	OS not found
 #----
 find_OS() {
-	local distrib=$1
-	local dist_found=""
-	local system=""
-	local lsb_release=""
-	system="$(uname -s)"
-	if [ "$system" = "Linux" ] ; then
-		if [ "$(pathfind lsb_release; echo $?)" -eq "0" ] ; then
-		#if [ "$(find / -name lsb_release; echo $?)" -eq "0" ] ; then
-			lsb_release="$(lsb_release -i -s)"
-		else
-			lsb_release="NOT_FOUND"
-		fi
-		if [ "$lsb_release" = "Debian" ] || \
-			[ "$lsb_release" = "Ubuntu" ] || \
-			[ -e "/etc/debian_version" ] ; then
-			dist_found="DEBIAN"
-			log "INFO" "GNU/Linux Debian Distribution"
-		elif [ "$lsb_release" = "SUSE LINUX" ] || \
-			[ -e "/etc/SuSE-release" ] ; then
-			dist_found="SUSE"
-			log "INFO" "GNU/Linux Suse Distribution"
-		elif [ "$lsb_release" = "RedHatEnterpriseES" ] || \
-			[ "$lsb_release" = "Fedora" ] || \
-			[ -e "/etc/redhat-release" ] ; then
-			dist_found="REDHAT"
-			log "INFO" "GNU/Linux Redhat Distribution"
-		else
-			dist_found="NOT_FOUND"
-			log "INFO" "GNU/Linux distribution not found"
-			return 1
-		fi
-	elif [ "$system" = "FreeBSD" ] ; then
-		dist_found="FREEBSD"
-		log "INFO" "FreeBSD System"
-	elif [ "$system" = "AIX" ] ; then
-		dist_found="AIX"
-		log "INFO" "AIX System"
-	elif [ "$system" = "SunOS" ] ; then
-		dist_found="SUNOS"
-		log "INFO" "SunOS System"
-	else
-		dist_found="NOT_FOUND"
-		log "INFO" "System not found"
-	fi
+    local distrib=$1
+    local dist_found=""
+    local system=""
+    local lsb_release=""
+    system="$(uname -s)"
+    if [ "$system" = "Linux" ] ; then
+        if [ "$(pathfind lsb_release; echo $?)" -eq "0" ] ; then
+            lsb_release="$(lsb_release -i -s)"
+        else
+            lsb_release="NOT_FOUND"
+        fi
+        if [ "$lsb_release" = "Debian" ] || \
+            [ "$lsb_release" = "Ubuntu" ] || \
+            [ -e "/etc/debian_version" ] ; then
+            dist_found="DEBIAN"
+            log "INFO" "GNU/Linux Debian Distribution"
+        elif [ "$lsb_release" = "SUSE LINUX" ] || \
+            [ -e "/etc/SuSE-release" ] ; then
+            dist_found="SUSE"
+            log "INFO" "GNU/Linux Suse Distribution"
+        elif [ "$lsb_release" = "RedHatEnterpriseES" ] || \
+            [ "$lsb_release" = "Fedora" ] || \
+            [ -e "/etc/redhat-release" ] ; then
+            dist_found="REDHAT"
+            log "INFO" "GNU/Linux Redhat Distribution"
+        else
+            dist_found="NOT_FOUND"
+            log "INFO" "GNU/Linux distribution not found"
+            return 1
+        fi
+    elif [ "$system" = "FreeBSD" ] ; then
+        dist_found="FREEBSD"
+        log "INFO" "FreeBSD System"
+    elif [ "$system" = "AIX" ] ; then
+        dist_found="AIX"
+        log "INFO" "AIX System"
+    elif [ "$system" = "SunOS" ] ; then
+        dist_found="SUNOS"
+        log "INFO" "SunOS System"
+    else
+        dist_found="NOT_FOUND"
+        log "INFO" "System not found"
+    fi
 
-	eval $distrib=$dist_found
-	return 0
+    eval $distrib=$dist_found
+    return 0
 }
 
 #----
@@ -914,16 +913,16 @@ find_OS() {
 ## @param	message to print
 #----
 check_result() {
-	local code=$1
-	shift
-	local message=$@
+    local code=$1
+    shift
+    local message=$@
 
-	if [ $code -eq 0 ] ; then
-		echo_success "$message" "$ok"
-	else
-		echo_failure "$message" "$fail"
-	fi
-	return 0
+    if [ $code -eq 0 ] ; then
+        echo_success "$message" "$ok"
+    else
+        echo_failure "$message" "$fail"
+    fi
+    return 0
 }
 
 #----
@@ -938,7 +937,7 @@ test_file() {
         return 0
     else
         echo -e "The file named '$file' is missing or empty\nPlease check your sources"
-	    exit 1
+        exit 1
     fi
 }
 

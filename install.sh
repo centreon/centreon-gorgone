@@ -155,18 +155,18 @@ echo "$line"
 
 binary_fail="0"
 for binary in $BINARIES; do
-	if [ ! -e ${binary} ] ; then 
-		pathfind "$binary"
-		if [ "$?" -eq 0 ] ; then
-			echo_success "${binary}" "$ok"
-		else 
-			echo_failure "${binary}" "$fail"
-			log "ERROR" "\$binary not found in \$PATH"
-			binary_fail=1
-		fi
-	else
-		echo_success "${binary}" "$ok"
-	fi
+    if [ ! -e ${binary} ] ; then
+        pathfind "$binary"
+        if [ "$?" -eq 0 ] ; then
+            echo_success "${binary}" "$ok"
+        else
+            echo_failure "${binary}" "$fail"
+            log "ERROR" "\$binary not found in \$PATH"
+            binary_fail=1
+        fi
+    else
+        echo_success "${binary}" "$ok"
+    fi
 done
 
 ## Script stop if one binary wasn't found

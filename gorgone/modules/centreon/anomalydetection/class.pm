@@ -324,7 +324,7 @@ sub saas_register_metrics {
         };
 
         my ($status, $result) = $self->saas_api_request(
-            endpoint => '/machinelearning',
+            endpoint => '/v1/machinelearning',
             method => 'POST',
             payload => $payload,
             http_code_continue => '^2'
@@ -400,7 +400,7 @@ sub saas_delete_metrics {
 
         if (defined($self->{centreon_metrics}->{$_}->{saas_model_id})) {
             my ($status, $result) = $self->saas_api_request(
-                endpoint => '/machinelearning/' . $self->{centreon_metrics}->{$_}->{saas_model_id},
+                endpoint => '/v1/machinelearning/' . $self->{centreon_metrics}->{$_}->{saas_model_id},
                 method => 'DELETE',
                 http_code_continue => '^(?:2|404)'
             );
@@ -491,7 +491,7 @@ sub saas_get_predicts {
         next if ($self->{centreon_metrics}->{$_}->{saas_update_date} > time() - 86400);
 
         my ($status, $result) = $self->saas_api_request(
-            endpoint => '/machinelearning/' . $self->{centreon_metrics}->{$_}->{saas_model_id} . '/predicts',
+            endpoint => '/v1/machinelearning/' . $self->{centreon_metrics}->{$_}->{saas_model_id} . '/predicts',
             method => 'GET',
             http_code_continue => '^2'
         );

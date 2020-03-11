@@ -20,6 +20,10 @@
 ##
 ##    For information : infos@centreon.com
 #
+# @TODO
+# - add the silent mode install
+# - add the upgrade  mode
+# - add the kill and clean system
 
 #----
 ## define the available options and usage of the script

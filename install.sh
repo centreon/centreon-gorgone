@@ -176,6 +176,15 @@ if [ "$binary_fail" -eq 1 ] ; then
 	exit 1
 fi
 
+echo "$line"
+echo -e "\tChecking the required users"
+echo "$line"
+
+## create gorgone user
+check_gorgone_group
+check_gorgone_user
+
+
 echo -e "\n$line"
 echo -e "\tChecking the mandatory folders"
 echo -e "$line"
@@ -194,14 +203,6 @@ locate_cron_d
 locate_logrotate_d
 locate_system_d
 locate_sysconfig
-
-echo "$line"
-echo -e "\tChecking the required users"
-echo "$line"
-
-## create gorgone user
-check_gorgone_group
-check_gorgone_user
 
 echo -e "\n$line"
 echo -e "\tAdding Gorgone user to the mandatory folders"
@@ -252,7 +253,8 @@ ${CAT} << __EOT__
 #                          -----------------------                            #
 #                                                                             #
 #           Please add the configuration in a file in the folder :            #
-#                               $GORGONE_ETC                                  #
+#                           $GORGONE_ETC/config.d                             #
+#                     Then start the gorgoned.service                         #
 #                                                                             #
 #                You can read the documentation available here :              #
 #      https://github.com/centreon/centreon-gorgone/blob/master/README.md     #

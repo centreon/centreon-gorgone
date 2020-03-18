@@ -228,7 +228,7 @@ if [ $? -ne 0 ] ; then
     echo_failure "$(gettext "Cannot modify the owner of the files in $GORGONE_ETC folder")" "$fail"
 fi
 
-# modify the gorgoned file to take in account
+# modify the gorgoned file to take in account the chosen user path
 change_environment_file_path
 
 ## Copy the files in destination folders and modify rights

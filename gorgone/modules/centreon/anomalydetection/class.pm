@@ -368,7 +368,7 @@ sub saas_register_metrics {
             ' saas_metric_id = ' . $self->{class_object_centreon}->quote(value => $register_centreon_metrics->{$_}->{saas_metric_id}) . ',' .
             ' saas_creation_date = ' . $register_centreon_metrics->{$_}->{saas_creation_date} . ',' .
             ' saas_update_date = ' . $register_centreon_metrics->{$_}->{saas_creation_date} .
-            ' WHERE `id` = ' . $_;
+            ' WHERE id = ' . $_;
         $query_append = ';';
     }
 
@@ -537,7 +537,7 @@ sub saas_get_predicts {
         $query .= $query_append . 
             'UPDATE mod_anomaly_service SET' .
             ' saas_update_date = ' . time() .
-            ' WHERE `id` = ' . $_;
+            ' WHERE id = ' . $_;
         $query_append = ';';
     }
 

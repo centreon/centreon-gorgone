@@ -265,7 +265,7 @@ sub save_centreon_previous_register {
             ' saas_metric_id = ' . $self->{class_object_centreon}->quote(value => $self->{unregister_metrics_centreon}->{$_}->{saas_metric_id}) . ',' .
             ' saas_creation_date = ' . $self->{unregister_metrics_centreon}->{$_}->{creation_date} . ',' .
             ' saas_update_date = ' . $self->{unregister_metrics_centreon}->{$_}->{creation_date} .
-            ' WHERE `id` = ' . $_;
+            ' WHERE id = ' . $_;
         $query_append = ';';
     }
     if ($query ne '') {

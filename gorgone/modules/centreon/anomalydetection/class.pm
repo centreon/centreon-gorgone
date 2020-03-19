@@ -32,6 +32,7 @@ use ZMQ::Constants qw(:all);
 use JSON::XS;
 use IO::Compress::Bzip2;
 use MIME::Base64;
+use Data::Dumper;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -235,11 +236,10 @@ sub get_centreon_anomaly_metrics {
 
     ($status, $datas) = $self->{class_object_centreon}->custom_execute(
         request => '
-            SELECT mas.*, hsr.host_host_id as host_id, nhr.nagios_server_id as instance_id
-            FROM mod_anomaly_service mas, host_service_relation hsr, ns_host_relation nhr
-            WHERE
-                mas.service_id = hsr.service_service_id AND
-                hsr.host_host_id = nhr.host_host_id
+            SELECT DISTINCT mas.*, hsr.host_host_id as host_id, nhr.nagios_server_id as instance_id
+            FROM mod_anomaly_service mas
+            LEFT JOIN host_service_relation hsr ON (mas.service_id = hsr.service_service_id)
+            LEFT JOIN ns_host_relation nhr ON (hsr.host_host_id = nhr.host_host_id)
         ',
         keys => 'id',
         mode => 1
@@ -257,30 +257,27 @@ sub get_centreon_anomaly_metrics {
 sub save_centreon_previous_register {
     my ($self, %options) = @_;
 
-    my ($query, $query_append) = ('', '');
     foreach (keys %{$self->{unregister_metrics_centreon}}) {
-        $query .= $query_append . 
+        my $query = 
             'UPDATE mod_anomaly_service SET' .
             ' saas_model_id = ' . $self->{class_object_centreon}->quote(value => $self->{unregister_metrics_centreon}->{$_}->{saas_model_id}) . ',' .
             ' saas_metric_id = ' . $self->{class_object_centreon}->quote(value => $self->{unregister_metrics_centreon}->{$_}->{saas_metric_id}) . ',' .
             ' saas_creation_date = ' . $self->{unregister_metrics_centreon}->{$_}->{creation_date} . ',' .
             ' saas_update_date = ' . $self->{unregister_metrics_centreon}->{$_}->{creation_date} .
             ' WHERE id = ' . $_;
-        $query_append = ';';
-    }
-    if ($query ne '') {
+
+        return 0 if ($query eq '');
+
         my $status = $self->{class_object_centreon}->transaction_query(request => $query);
         if ($status == -1) {
             $self->{logger}->writeLogError('[anomalydetection] -class- database: cannot save centreon previous register');
             return 1;
         }
 
-        foreach (keys %{$self->{unregister_metrics_centreon}}) {
-            $self->{centreon_metrics}->{$_}->{saas_creation_date} = $self->{unregister_metrics_centreon}->{$_}->{creation_date};
-            $self->{centreon_metrics}->{$_}->{saas_update_date} = $self->{unregister_metrics_centreon}->{$_}->{creation_date};
-            $self->{centreon_metrics}->{$_}->{saas_model_id} = $self->{unregister_metrics_centreon}->{$_}->{saas_model_id};
-            $self->{centreon_metrics}->{$_}->{saas_metric_id} = $self->{unregister_metrics_centreon}->{$_}->{saas_metric_id};
-        }
+        $self->{centreon_metrics}->{$_}->{saas_creation_date} = $self->{unregister_metrics_centreon}->{$_}->{creation_date};
+        $self->{centreon_metrics}->{$_}->{saas_update_date} = $self->{unregister_metrics_centreon}->{$_}->{creation_date};
+        $self->{centreon_metrics}->{$_}->{saas_model_id} = $self->{unregister_metrics_centreon}->{$_}->{saas_model_id};
+        $self->{centreon_metrics}->{$_}->{saas_metric_id} = $self->{unregister_metrics_centreon}->{$_}->{saas_metric_id};
     }
 
     $self->{unregister_metrics_centreon} = {};
@@ -291,7 +288,6 @@ sub saas_register_metrics {
     my ($self, %options) = @_;
 
     my $register_centreon_metrics = {};
-    my ($query, $query_append) = ('', '');
     
     $self->{generate_metrics_lua} = 0;
     foreach (keys %{$self->{centreon_metrics}}) {
@@ -362,26 +358,23 @@ sub saas_register_metrics {
             saas_metric_id => $result->{metrics}->[0]->{id}
         };
 
-        $query .= $query_append . 
+        my $query = 
             'UPDATE mod_anomaly_service SET' .
             ' saas_model_id = ' . $self->{class_object_centreon}->quote(value => $register_centreon_metrics->{$_}->{saas_model_id}) . ',' .
             ' saas_metric_id = ' . $self->{class_object_centreon}->quote(value => $register_centreon_metrics->{$_}->{saas_metric_id}) . ',' .
             ' saas_creation_date = ' . $register_centreon_metrics->{$_}->{saas_creation_date} . ',' .
             ' saas_update_date = ' . $register_centreon_metrics->{$_}->{saas_creation_date} .
             ' WHERE id = ' . $_;
-        $query_append = ';';
-    }
 
-    return 0 if ($query eq '');
+        return 0 if ($query eq '');
 
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-    if ($status == -1) {
-        $self->{unregister_metrics_centreon} = $register_centreon_metrics;
-        $self->{logger}->writeLogError('[anomalydetection] -class- database: cannot update centreon register');
-        return 1;
-    }
+        my $status = $self->{class_object_centreon}->transaction_query(request => $query);
+        if ($status == -1) {
+            $self->{unregister_metrics_centreon} = $register_centreon_metrics;
+            $self->{logger}->writeLogError('[anomalydetection] -class- database: cannot update centreon register');
+            return 1;
+        }
 
-    foreach (keys %$register_centreon_metrics) {
         $self->{centreon_metrics}->{$_}->{saas_creation_date} = $register_centreon_metrics->{$_}->{saas_creation_date};
         $self->{centreon_metrics}->{$_}->{saas_update_date} = $register_centreon_metrics->{$_}->{saas_creation_date};
         $self->{centreon_metrics}->{$_}->{saas_metric_id} = $register_centreon_metrics->{$_}->{saas_metric_id};
@@ -407,7 +400,7 @@ sub saas_delete_metrics {
             next if ($status);
 
             $self->{logger}->writeLogDebug(
-                "[anomalydetection] -class- saas: metric '$self->{centreon_metrics}->{$_}->{host_id}/$self->{centreon_metrics}->{$_}->{service_id}/$self->{centreon_metrics}->{$_}->{metric_name}' deleted"
+                "[anomalydetection] -class- saas: metric '$self->{centreon_metrics}->{$_}->{service_id}/$self->{centreon_metrics}->{$_}->{metric_name}' deleted"
             );
 
             next if (!defined($result->{message}) ||
@@ -482,7 +475,6 @@ sub generate_lua_filter_file {
 sub saas_get_predicts {
     my ($self, %options) = @_;
 
-    my ($query, $query_append) = ('', '');
     my $engine_reload = {};
     foreach (keys %{$self->{centreon_metrics}}) {
         next if ($self->{centreon_metrics}->{$_}->{saas_to_delete} == 1);
@@ -534,14 +526,19 @@ sub saas_get_predicts {
 
         $engine_reload->{ $self->{centreon_metrics}->{$_}->{instance_id} } = 1;
 
-        $query .= $query_append . 
+        my $query = 
             'UPDATE mod_anomaly_service SET' .
             ' saas_update_date = ' . time() .
             ' WHERE id = ' . $_;
-        $query_append = ';';
-    }
 
-    return 0 if ($query eq '');
+        if ($query ne '') {
+            my $status = $self->{class_object_centreon}->transaction_query(request => $query);
+            if ($status == -1) {
+                $self->{logger}->writeLogError('[anomalydetection] -class- database: cannot update predicts');
+                return 1;
+            }
+        }
+    }
 
     foreach (keys %$engine_reload) {
         my $poller = $self->get_poller(instance => $_);
@@ -554,12 +551,6 @@ sub saas_get_predicts {
                 content => [ { command => 'sudo ' . $poller->{engine_reload_command} } ]
             }
         );
-    }
-
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-    if ($status == -1) {
-        $self->{logger}->writeLogError('[anomalydetection] -class- database: cannot update predicts');
-        return 1;
     }
 
     return 0;

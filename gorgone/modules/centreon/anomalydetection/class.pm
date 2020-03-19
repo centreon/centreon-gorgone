@@ -32,7 +32,6 @@ use ZMQ::Constants qw(:all);
 use JSON::XS;
 use IO::Compress::Bzip2;
 use MIME::Base64;
-use Data::Dumper;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -438,6 +437,19 @@ sub generate_lua_filter_file {
         $data->{filters}->{ $_->{host_id} }->{ $_->{service_id} }->{ $_->{metric_name} } = 1;
     }
 
+    # Convert $data array to stream connector format
+    my @temp_data;
+    foreach my $host_id (keys %{$data->{filters}}) {
+        foreach my $service_id (keys %{$data->{filters}->{ $host_id }}) {
+            my @metricNames;
+            foreach my $metric (keys %{$data->{filters}->{ $host_id }->{ $service_id }}) {
+                push (@metricNames, $metric);
+            }
+            push (@temp_data, { host_id => $host_id, service_id => $service_id, metric_name => [ @metricNames ] });
+        }
+    }
+    $data = { filters => [ @temp_data ] };
+
     my ($status, $content) = $self->json_encode(argument => $data);
     if ($status == 1) {
         $self->{logger}->writeLogError('[anomalydetection] -class- cannot encode lua filter file');
@@ -451,7 +463,7 @@ sub generate_lua_filter_file {
     }
 
     my $poller = $self->get_poller(instance => $instance);
-    my $file = $poller->{centreonbroker_cfg_path} . '/anomaly-detection-filters.json';
+    my $file = $poller->{centreonbroker_cfg_path} . '/anomaly-detection.json';
     if (! -w $poller->{centreonbroker_cfg_path}) {
         $self->{logger}->writeLogError("[anomalydetection] -class- cannot write file '" . $file . "'");
         return 1;
@@ -559,7 +571,7 @@ sub saas_get_predicts {
 sub action_saaspredict {
     my ($self, %options) = @_;
 
-    $self->{logger}->writeLogDebug('[anomalydetection] -class - start saaspredict');
+    $self->{logger}->writeLogDebug('[anomalydetection] -class- start saaspredict');
     $options{token} = $self->generate_token() if (!defined($options{token}));
     $self->send_log(code => gorgone::class::module::ACTION_BEGIN, token => $options{token}, data => { message => 'action saaspredict proceed' });
 

@@ -31,7 +31,7 @@ use ZMQ::Constants qw(:all);
 use File::Path qw(make_path);
 use JSON::XS;
 use Time::HiRes;
-use gorgone::modules::centreon::statistics::rrds;
+use RRDs;
 
 my $result;
 my %handlers = (TERM => {}, HUP => {});
@@ -310,8 +310,8 @@ sub write_broker_stats {
     
     if (! -d $broker_cache_dir ) {
         if (make_path($broker_cache_dir) == 0) {
-            $self->{logger}->writeLogError("[statistics] Can't create directory '" . $broker_cache_dir . "': $!");
-            return 0;
+            $self->{logger}->writeLogError("[statistics] Cannot create directory '" . $broker_cache_dir . "': $!");
+            return 1;
         }
     }
 
@@ -335,8 +335,8 @@ sub write_engine_stats {
 
     if (! -d $engine_stats_dir ) {
         if (make_path($engine_stats_dir) == 0) {
-            $self->{logger}->writeLogError("[statistics] Can't create directory '" . $engine_stats_dir . "': $!");
-            return 0;
+            $self->{logger}->writeLogError("[statistics] Cannot create directory '" . $engine_stats_dir . "': $!");
+            return 1;
         }
     }
 
@@ -345,60 +345,66 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_cmd_buffer.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "In_Use", "Max_Used", "Total_Available" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "In_Use", "Max_Used", "Total_Available" ],
                 values => [ $1, $2 , $3 ]
             );
         } elsif ($_ =~ /Active Service Latency:\s*([0-9\.]*)\ \/\ ([0-9\.]*)\ \/\ ([0-9\.]*)\ sec/) {
+            my $status = $self->{class_object_centstorage}->custom_execute(
+                request => "DELETE FROM `nagios_stats` WHERE instance_id = '" . $options{data}->{metadata}->{poller_id} . "'"
+            );
+            if ($status == -1) {
+                $self->{logger}->writeLogError("[statistics] Failed to delete statistics in 'nagios_stats table'");
+            } else {
+                my $status = $self->{class_object_centstorage}->custom_execute(
+                    request => "INSERT INTO `nagios_stats` (instance_id, stat_label, stat_key, stat_value) VALUES " .
+                        "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Min', '$1'), " .
+                        "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Max', '$2'), " .
+                        "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Average', '$3')"
+                );
+                if ($status == -1) {
+                    $self->{logger}->writeLogError("[statistics] Failed to add statistics in 'nagios_stats table'");
+                }
+            }
+
             my $dest_file = $engine_stats_dir . '/nagios_active_service_latency.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Min", "Max", "Average" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Min", "Max", "Average" ],
                 values => [ $1, $2 , $3 ]
-            );
-
-            my $status = $self->{class_object_centstorage}->custom_execute(
-                request => "DELETE FROM `nagios_stats` WHERE instance_id = '" . $options{data}->{metadata}->{poller_id} . "'"
-            );
-
-            $status = $self->{class_object_centstorage}->custom_execute(
-                request => "INSERT INTO `nagios_stats` (instance_id, stat_label, stat_key, stat_value) VALUES " .
-                    "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Min', '$1'), " .
-                    "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Max', '$2'), " .
-                    "('$options{data}->{metadata}->{poller_id}', 'Service Check Latency', 'Average', '$3')"
             );
         } elsif ($_ =~ /Active Service Execution Time:\s*([0-9\.]*)\ \/\ ([0-9\.]*)\ \/\ ([0-9\.]*)\ sec/) {
             my $dest_file = $engine_stats_dir . '/nagios_active_service_execution.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Min", "Max", "Average" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Min", "Max", "Average" ],
                 values => [ $1, $2 , $3 ]
@@ -407,15 +413,15 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_active_service_last.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Last_Min", "Last_5_Min", "Last_15_Min", "Last_Hour" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Last_Min", "Last_5_Min", "Last_15_Min", "Last_Hour" ],
                 values => [ $1, $2 , $3, $4 ]
@@ -424,15 +430,15 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_services_states.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Ok", "Warn", "Unk", "Crit" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Ok", "Warn", "Unk", "Crit" ],
                 values => [ $1, $2 , $3, $4 ]
@@ -441,15 +447,15 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_active_host_latency.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Min", "Max", "Average" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Min", "Max", "Average" ],
                 values => [ $1, $2 , $3 ]
@@ -458,15 +464,15 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_active_host_execution.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Min", "Max", "Average" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Min", "Max", "Average" ],
                 values => [ $1, $2 , $3 ]
@@ -475,15 +481,15 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_active_host_last.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Last_Min", "Last_5_Min", "Last_15_Min", "Last_Hour" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Last_Min", "Last_5_Min", "Last_15_Min", "Last_Hour" ],
                 values => [ $1, $2 , $3, $4 ]
@@ -492,21 +498,82 @@ sub write_engine_stats {
             my $dest_file = $engine_stats_dir . '/nagios_hosts_states.rrd';
             $self->{logger}->writeLogDebug("[statistics] Writing in file '" . $dest_file . "'");
             if (!-e $dest_file) {
-                gorgone::modules::centreon::statistics::rrds::rrd_create(
+                next if ($self->rrd_create(
                     file => $dest_file,
                     heartbeat => $self->{config}->{heartbeat},
                     interval => $self->{config}->{interval},
                     number => $self->{config}->{number},
                     ds => [ "Up", "Down", "Unreach" ]
-                );
+                ));
             }
-            gorgone::modules::centreon::statistics::rrds::rrd_update(
+            $self->rrd_update(
                 file => $dest_file,
                 ds => [ "Up", "Down", "Unreach" ],
                 values => [ $1, $2 , $3 ]
             );
         }
     }
+}
+
+sub rrd_create {
+    my ($self, %options) = @_;
+
+    my @ds;
+    foreach my $ds (@{$options{ds}}) {
+        push @ds, "DS:" . $ds . ":GAUGE:" . $options{interval} . ":0:U";
+    }
+    
+    RRDs::create(
+        $options{file},
+        "-s" . $options{interval},
+        @ds,
+        "RRA:AVERAGE:0.5:1:" . $options{number},
+        "RRA:AVERAGE:0.5:12:" . $options{number}
+    );
+    if (RRDs::error()) {
+        my $error = RRDs::error();
+        $self->{logger}->writeLogError("[statistics] Error creating RRD file '" . $options{file} . "': " . $error);
+        return 1
+    }
+    
+    foreach my $ds (@{$options{ds}}) {
+        RRDs::tune($options{file}, "-h",  $ds . ":" . $options{heartbeat});
+        if (RRDs::error()) {
+            my $error = RRDs::error();
+            $self->{logger}->writeLogError("[statistics] Error tuning RRD file '" . $options{file} . "': " . $error);
+            return 1
+        }
+    }
+
+    return 0;
+}
+
+sub rrd_update {
+    my ($self, %options) = @_;
+
+    my $append = '';
+    my $ds;
+    foreach (@{$options{ds}}) {
+        $ds .= $append . $_;
+        $append = ':';
+    }
+    my $values;
+    foreach (@{$options{values}}) {
+        $values .= $append . $_;
+    }
+    RRDs::update(
+        $options{file},
+        "--template",
+        $ds,
+        "N" . $values
+    );
+    if (RRDs::error()) {
+        my $error = RRDs::error();
+        $self->{logger}->writeLogError("[statistics] Error updating RRD file '" . $options{file} . "': " . $error);
+        return 1
+    }
+    
+    return 0;
 }
 
 sub write_stats {
@@ -517,8 +584,6 @@ sub write_stats {
 
     foreach my $entry (@{$options{data}->{data}->{result}}) {
         my $data = JSON::XS->new->utf8->decode($entry->{data});
-        use Data::Dumper;
-        # print Dumper $data;
         
         if (defined($data->{metadata}->{source})) {
             if ($data->{metadata}->{source} eq "brokerstats") {

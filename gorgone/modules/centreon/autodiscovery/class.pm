@@ -339,9 +339,12 @@ sub action_updatediscoveryresults {
             my $digest = $ctx->hexdigest;
             my $uuid = substr($digest, 0, 8) . '-' . substr($digest, 8, 4) . '-' . substr($digest, 12, 4) . '-' .
                 substr($digest, 16, 4) . '-' . substr($digest, 20, 12);
+            my $encoded_host = JSON::XS->new->utf8->encode($host);
+            $encoded_host =~ s/\\/\\\\/g;
+            $encoded_host =~ s/'/\\'/g;
 
-            $values .= $append . "('" . $job_id . "', '" . JSON::XS->new->utf8->encode($host) ."', '" . $uuid . "')";
-            $append = ', '
+            $values .= $append . "('" . $job_id . "', '" . $encoded_host  ."', '" . $uuid . "')";
+            $append = ', ';
         }
 
         if (defined($values) && $values ne '') {

@@ -255,7 +255,8 @@ sub routing {
                 data => $data,
                 token => $options{token},
                 target_parent => $target_parent,
-                target => $target
+                target => $target,
+                logger => $options{logger}
             );
             next;
         }

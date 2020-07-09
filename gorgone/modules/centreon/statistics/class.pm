@@ -91,9 +91,7 @@ sub get_pollers_config {
     my ($self, %options) = @_;
 
     my ($status, $data) = $self->{class_object_centreon}->custom_execute(
-        request => "SELECT id, nagiostats_bin, cfg_dir, cfg_file FROM cfg_nagios " .
-            "JOIN nagios_server " .
-            "WHERE ns_activate = '1' AND nagios_id = id",
+        request => "SELECT id, nagiostats_bin, cfg_dir, cfg_file FROM nagios_server, cfg_nagios WHERE ns_activate = '1' AND cfg_nagios.nagios_server_id = nagios_server.id",
         mode => 1,
         keys => 'id'
     );

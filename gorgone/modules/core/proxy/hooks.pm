@@ -126,7 +126,7 @@ sub routing {
         $options{logger}->writeLogError("[proxy] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
-            code => 20, token => $options{token},
+            code => gorgone::class::module::ACTION_FINISH_KO, token => $options{token},
             data => { message => 'proxy - cannot decode json' },
             json_encode => 1
         );
@@ -679,7 +679,7 @@ sub pull_request {
     if (!defined($register_nodes->{ $options{target_parent} }->{identity})) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
-            code => 20,
+            code => gorgone::class::module::ACTION_FINISH_KO,
             token => $options{token},
             data => { message => "proxy - node '" . $options{target_parent} . "' had never been connected" },
             json_encode => 1
@@ -693,7 +693,8 @@ sub pull_request {
     if ($status == 0) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
-            code => 20, token => $options{token},
+            code => gorgone::class::module::ACTION_FINISH_KO,
+            token => $options{token},
             data => { message => "proxy - node '" . $options{target_parent} . "' had never been connected" },
             json_encode => 1
         );

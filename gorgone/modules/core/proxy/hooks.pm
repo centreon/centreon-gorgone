@@ -679,7 +679,7 @@ sub pull_request {
     if (!defined($register_nodes->{ $options{target_parent} }->{identity})) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
-            code => GORGONE_ACTION_FINISH_KO,
+            code => 20,
             token => $options{token},
             data => { message => "proxy - node '" . $options{target_parent} . "' had never been connected" },
             json_encode => 1

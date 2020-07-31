@@ -184,6 +184,7 @@ sub routing {
     }
 
     my ($code, $target_complete, $target_parent, $target) = pathway(
+        action => $options{action},
         target => $options{target},
         dbh => $options{dbh},
         token => $options{token},
@@ -465,6 +466,11 @@ sub pathway {
         }
         if (!defined($last_pong->{$_}) || $last_pong->{$_} == 0 || (time() - $config->{pong_discard_timeout} < $last_pong->{$_})) {
             $options{logger}->writeLogDebug("[proxy] choose node target '$_' for node '$target'");
+            return (1, $_ . '~~' . $target, $_, $target);
+        }
+
+        # we let the ping passthrough
+        if ((time() - $config->{pong_discard_timeout} < $last_pong->{$_}) && $options{action} eq 'PING' && $_ eq $target) {
             return (1, $_ . '~~' . $target, $_, $target);
         }
 

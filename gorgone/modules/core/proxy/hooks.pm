@@ -196,7 +196,7 @@ sub routing {
     if (gorgone::class::core::waiting_ready_pool() == 0) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
-            code => GORGONE_ACTION_FINISH_KO,
+            code => gorgone::class::module::ACTION_FINISH_KO,
             token => $options{token},
             data => { message => 'proxy - still all ready' },
             json_encode => 1

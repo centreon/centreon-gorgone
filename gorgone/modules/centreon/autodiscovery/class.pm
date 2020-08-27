@@ -35,6 +35,8 @@ use Time::HiRes;
 use POSIX qw(strftime);
 use Digest::MD5 qw(md5_hex);
 
+use constant MAX_INSERT_BY_QUERY => 100;
+
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
@@ -111,18 +113,23 @@ sub action_addhostdiscoveryjob {
     $options{token} = $self->generate_token() if (!defined($options{token}));
     my $discovery_token = 'discovery_' . $options{data}->{content}->{job_id} . '_' . $self->generate_token(length => 4);
     
-    # Retrieve uuid attributes // to be replaced by parameters in API call
-    my $query = "SELECT uuid_attributes " .
-        "FROM mod_host_disco_provider mhdp " .
-        "JOIN mod_host_disco_job mhdj " .
-        "WHERE mhdj.provider_id = mhdp.id AND mhdj.id = '" . $options{data}->{content}->{job_id} . "'";
-    my ($status, $result) = $self->{class_object_centreon}->custom_execute(request => $query, mode => 2);
-    if ($status == -1) {
-        $self->{logger}->writeLogError('[autodiscovery] Failed to retrieve uuid attributes');
-        return 1;
+    my $uuid_attributes = $options{data}->{content}->{uuid_attributes};
+
+    if (!defined($uuid_attributes)) {
+        # Retrieve uuid attributes // to be replaced by parameters in API call
+        my $query = "SELECT uuid_attributes " .
+            "FROM mod_host_disco_provider mhdp " .
+            "JOIN mod_host_disco_job mhdj " .
+            "WHERE mhdj.provider_id = mhdp.id AND mhdj.id = " .
+            $self->{class_object_centreon}->quote(value => $options{data}->{content}->{job_id});
+        my ($status, $result) = $self->{class_object_centreon}->custom_execute(request => $query, mode => 2);
+        if ($status == -1) {
+            $self->{logger}->writeLogError('[autodiscovery] Failed to retrieve uuid attributes');
+            return 1;
+        }
+        
+        $uuid_attributes = JSON::XS->new->utf8->decode($result->[0]->[0]);
     }
-    
-    my $uuid_attributes = $result->[0]->[0];    
 
     my $timeout = (defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/) ?
         $options{data}->{content}->{timeout} : $self->{global_timeout};
@@ -180,7 +187,7 @@ sub action_addhostdiscoveryjob {
     }
     
     # Store discovery token // to be replaced by backend
-    $self->update_job_information(
+    return 1 if ($self->update_job_information(
         values => {
             token => $discovery_token
         },
@@ -189,7 +196,7 @@ sub action_addhostdiscoveryjob {
                 id => $options{data}->{content}->{job_id}
             }
         ]
-    );
+    ) == -1);
 
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
@@ -245,9 +252,20 @@ sub action_launchhostdiscovery {
     
     return if (!$self->is_module_installed());
 
-    if ($self->is_job_running(job_id => $options{data}->{content}->{job_id})) {
+    my $exists = $self->job_exists(job_id => $options{data}->{content}->{job_id});
+    if ($exists == 0) {
+        $self->{logger}->writeLogError("[autodiscovery] Trying to launch discovery for inexistant job '" . $options{data}->{content}->{job_id} . "'");
+        return 0;
+    } elsif ($exists == -1) {
+        return 1;
+    }
+
+    my $running = $self->is_job_running(job_id => $options{data}->{content}->{job_id});
+    if ($running > 0) {
         $self->{logger}->writeLogInfo("[autodiscovery] Job '" . $options{data}->{content}->{job_id} . "' is already running or result is being saved");
         return 0;
+    } elsif ($running == -1) {
+        return 1;
     }
 
     $self->{logger}->writeLogInfo("[autodiscovery] Launching discovery for job '" . $options{data}->{content}->{job_id} . "'");
@@ -288,7 +306,7 @@ sub action_launchhostdiscovery {
     );
 
     # Running
-    $self->update_job_information(
+    return 1 if ($self->update_job_information(
         values => {
             status => 3,
             message => "Running",
@@ -301,7 +319,9 @@ sub action_launchhostdiscovery {
                 id => $options{data}->{content}->{job_id}
             }
         ]
-    );
+    ) == -1);
+
+    return 0;
 }
 
 sub discovery_command_result {
@@ -309,13 +329,16 @@ sub discovery_command_result {
 
     return 1 if (!defined($options{data}->{data}->{metadata}->{job_id}));
 
-    if (!$self->job_exists(job_id => $options{data}->{data}->{metadata}->{job_id})) {
-        $self->{logger}->writeLogError("[autodiscovery] Found result for inexistant job '" . $options{data}->{data}->{metadata}->{job_id});
+    my $exists = $self->job_exists(job_id => $options{data}->{data}->{metadata}->{job_id});
+    if ($exists == 0) {
+        $self->{logger}->writeLogError("[autodiscovery] Found result for inexistant job '" . $options{data}->{data}->{metadata}->{job_id} . "'");
         return 0;
+    } elsif ($exists == -1) {
+        return 1;
     }
 
     $self->{logger}->writeLogInfo("[autodiscovery] Found result for job '" . $options{data}->{data}->{metadata}->{job_id} . "'");
-    my $uuid_attributes = JSON::XS->new->utf8->decode($options{data}->{data}->{metadata}->{uuid_attributes});
+    my $uuid_attributes = $options{data}->{data}->{metadata}->{uuid_attributes};
     my $job_id = $options{data}->{data}->{metadata}->{job_id};
     my $exit_code = $options{data}->{data}->{result}->{exit_code};
     my $output = (defined($options{data}->{data}->{result}->{stderr}) && $options{data}->{data}->{result}->{stderr} ne '') ?
@@ -359,10 +382,11 @@ sub discovery_command_result {
                 }
             ]
         );
+        return 1;
     }
 
     # Finished
-    $self->update_job_information(
+    return 1 if ($self->update_job_information(
         values => {
             status => 1,
             message => "Finished",
@@ -374,7 +398,7 @@ sub discovery_command_result {
                 id => $job_id
             }
         ]
-    );
+    ) == -1);
 
     # Delete previous results
     my $query = "DELETE FROM mod_host_disco_host WHERE job_id = " . $self->{class_object_centreon}->quote(value => $job_id);
@@ -385,9 +409,22 @@ sub discovery_command_result {
     }
 
     # Add new results
-    my $values;
+    my $number_of_lines = 0;
+    my $values = '';
     my $append = '';
+    $query = "INSERT INTO mod_host_disco_host (job_id, discovery_result, uuid) VALUES ";
     foreach my $host (@{$result->{results}}) {
+        if ($number_of_lines == MAX_INSERT_BY_QUERY) {
+            $status = $self->{class_object_centreon}->transaction_query(request => $query . $values);
+            if ($status == -1) {
+                $self->{logger}->writeLogError('[autodiscovery] Failed to insert job results');
+                return 1;
+            }
+            $number_of_lines = 0;
+            $values = '';
+            $append = '';
+        }
+
         # Generate uuid based on attributs
         my $uuid_char = '';
         foreach (@{$uuid_attributes}) {
@@ -400,22 +437,23 @@ sub discovery_command_result {
             substr($digest, 16, 4) . '-' . substr($digest, 20, 12);
         my $encoded_host = JSON::XS->new->utf8->encode($host);
 
+        # Build bulk insert
         $values .= $append . "(" . $self->{class_object_centreon}->quote(value => $job_id) . ", " . 
             $self->{class_object_centreon}->quote(value => $encoded_host) . ", " . 
             $self->{class_object_centreon}->quote(value => $uuid) . ")";
         $append = ', ';
+        $number_of_lines++;
     }
 
-    if (defined($values) && $values ne '') {
-        $query = "INSERT INTO mod_host_disco_host (job_id, discovery_result, uuid) VALUES " . $values;
-        $status = $self->{class_object_centreon}->transaction_query(request => $query);
+    if ($values ne '') {
+        $status = $self->{class_object_centreon}->transaction_query(request => $query . $values);
         if ($status == -1) {
             $self->{logger}->writeLogError('[autodiscovery] Failed to insert job results');
             return 1;
         }
     }
 
-    return 1;
+    return 0;
 }
 
 sub update_job_information {
@@ -442,7 +480,7 @@ sub update_job_information {
     my $status = $self->{class_object_centreon}->transaction_query(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError('[autodiscovery] Failed to update job information');
-        return 1;
+        return -1;
     }
 
     return 0;
@@ -456,6 +494,10 @@ sub job_exists {
             $self->{class_object_centreon}->quote(value => $options{job_id}),
         mode => 2
     );
+    if ($status == -1) {
+        $self->{logger}->writeLogError('[autodiscovery] Failed to determine if job exists');
+        return -1;
+    }
 
     (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
 }
@@ -469,6 +511,10 @@ sub is_job_running {
             " AND status IN ('3', '4')", # 'Running' and 'Save running'
         mode => 2
     );
+    if ($status == -1) {
+        $self->{logger}->writeLogError('[autodiscovery] Failed to determine if job is running');
+        return -1;
+    }
 
     (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
 }

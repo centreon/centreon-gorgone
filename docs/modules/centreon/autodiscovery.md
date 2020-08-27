@@ -151,7 +151,8 @@ curl --request POST "https://hostname:8443/api/centreon/autodiscovery/hosts" \
         \"parameters\": {
             \"cron_definition\": \"*/10 * * * *\"
         }
-    }
+    },
+    \"post_execution\": {}
 }"
 ```
 

@@ -133,7 +133,7 @@ sub action_addhostdiscoveryjob {
             data => {
                 content => {
                     target => $options{data}->{content}->{target},
-                    command => $options{data}->{content}->{command},
+                    command_line => $options{data}->{content}->{command_line},
                     timeout => $timeout,
                     job_id => $options{data}->{content}->{job_id},
                     uuid_attributes => $uuid_attributes,
@@ -149,7 +149,7 @@ sub action_addhostdiscoveryjob {
             return 1;
         }
 
-        # check if already scheduled
+        # TODO: check if already scheduled
 
         $self->{logger}->writeLogInfo("[autodiscovery] Add cron for job '" . $options{data}->{content}->{job_id} . "'");
         my $definition = {
@@ -159,7 +159,7 @@ sub action_addhostdiscoveryjob {
             action => 'LAUNCHHOSTDISCOVERY',
             parameters =>  {
                 target => $options{data}->{content}->{target},
-                command => $options{data}->{content}->{command},
+                command_line => $options{data}->{content}->{command_line},
                 timeout => $timeout,
                 job_id => $options{data}->{content}->{job_id},
                 uuid_attributes => $uuid_attributes,
@@ -171,12 +171,12 @@ sub action_addhostdiscoveryjob {
         $self->send_internal_action(
             action => 'ADDCRON',
             token => $options{token},
-            data => {   
+            data => {
                 content => [ $definition ],
             }
         );
         
-        # check if addcron ok
+        # TODO: check if addcron ok
     }
     
     # Store discovery token // to be replaced by backend
@@ -227,6 +227,8 @@ sub action_deletehostdiscoveryjob {
         data => {   
             variables => [ $discovery_token ]
         }
+
+        # TODO: check if deletecron ok
     );
     
     $self->send_log(
@@ -273,7 +275,7 @@ sub action_launchhostdiscovery {
             content => [
                 {
                     instant => 1,
-                    command => $options{data}->{content}->{command},
+                    command => $options{data}->{content}->{command_line},
                     timeout => $options{data}->{content}->{timeout},
                     metadata => {
                         job_id => $options{data}->{content}->{job_id},

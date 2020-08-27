@@ -33,7 +33,7 @@ use constant EVENTS => [
     { event => 'AUTODISCOVERYREADY' },
     { event => 'HOSTDISCOVERYLISTENER' },
     { event => 'SERVICEDISCOVERYLISTENER' },
-    { event => 'ADDHOSTDISCOVERYJOB', uri => '/job', method => 'POST' },
+    { event => 'ADDHOSTDISCOVERYJOB', uri => '/hosts', method => 'POST' },
     { event => 'DELETEHOSTDISCOVERYJOB', uri => '/hosts', method => 'DELETE' },
     { event => 'LAUNCHHOSTDISCOVERY' },
     { event => 'LAUNCHSERVICEDISCOVERY', uri => '/services', method => 'POST' },

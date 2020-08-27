@@ -103,31 +103,20 @@ Host Discovery part
 
 =cut
 
-sub action_adddiscoveryjob {
+sub action_addhostdiscoveryjob {
     my ($self, %options) = @_;
     
     return if (!$self->is_module_installed());
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
-    my $token = 'autodiscovery_' . $self->generate_token(length => 8);
+    my $discovery_token = 'discovery_' . $options{data}->{content}->{job_id} . '_' . $self->generate_token(length => 4);
     
-    # Scheduled
-    my $query = "UPDATE mod_host_disco_job " . 
-        "SET status = '0', duration = '0', discovered_items = '0', message = 'Scheduled' " .
-        "WHERE id = '" . $options{data}->{content}->{job_id} . "'";
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-    if ($status == -1) {
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status');
-        return 1;
-    }
-
-    # Retrieve uuid attributes
-    my $result;
-    $query = "SELECT uuid_attributes " .
+    # Retrieve uuid attributes // to be replaced by parameters in API call
+    my $query = "SELECT uuid_attributes " .
         "FROM mod_host_disco_provider mhdp " .
         "JOIN mod_host_disco_job mhdj " .
         "WHERE mhdj.provider_id = mhdp.id AND mhdj.id = '" . $options{data}->{content}->{job_id} . "'";
-    ($status, $result) = $self->{class_object_centreon}->custom_execute(request => $query, mode => 2);
+    my ($status, $result) = $self->{class_object_centreon}->custom_execute(request => $query, mode => 2);
     if ($status == -1) {
         $self->{logger}->writeLogError('[autodiscovery] Failed to retrieve uuid attributes');
         return 1;
@@ -138,9 +127,9 @@ sub action_adddiscoveryjob {
     my $timeout = (defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/) ?
         $options{data}->{content}->{timeout} : $self->{global_timeout};
 
-    if ($options{data}->{content}->{execution_mode} == 0) {
+    if ($options{data}->{content}->{execution}->{mode} == 0) {
         # Execute immediately
-        $self->action_launchdiscovery(
+        $self->action_launchhostdiscovery(
             data => {
                 content => {
                     target => $options{data}->{content}->{target},
@@ -148,25 +137,33 @@ sub action_adddiscoveryjob {
                     timeout => $timeout,
                     job_id => $options{data}->{content}->{job_id},
                     uuid_attributes => $uuid_attributes,
-                    token => $token
+                    token => $discovery_token
                 }
             }
         );
-    } else {
+    } elsif ($options{data}->{content}->{execution}->{mode} == 1) {
         # Schedule with cron
-        $self->{logger}->writeLogInfo("[autodiscovery] Add cron '" . $token . "' for job '" . $options{data}->{content}->{job_id} . "'");
+        if (!defined($options{data}->{content}->{execution}->{parameters}->{cron_definition}) ||
+            $options{data}->{content}->{execution}->{parameters}->{cron_definition} eq '') {
+            $self->{logger}->writeLogError("[autodiscovery] Missing 'cron_definition' parameter");
+            return 1;
+        }
+
+        # check if already scheduled
+
+        $self->{logger}->writeLogInfo("[autodiscovery] Add cron for job '" . $options{data}->{content}->{job_id} . "'");
         my $definition = {
-            id => $token,
+            id => $discovery_token,
             target => '1',
-            timespec => $options{data}->{content}->{timespec},
-            action => 'LAUNCHDISCOVERY',
+            timespec => $options{data}->{content}->{execution}->{parameters}->{cron_definition},
+            action => 'LAUNCHHOSTDISCOVERY',
             parameters =>  {
                 target => $options{data}->{content}->{target},
                 command => $options{data}->{content}->{command},
                 timeout => $timeout,
                 job_id => $options{data}->{content}->{job_id},
                 uuid_attributes => $uuid_attributes,
-                token => $token
+                token => $discovery_token
             },
             keep_token => 1,
         };
@@ -174,27 +171,82 @@ sub action_adddiscoveryjob {
         $self->send_internal_action(
             action => 'ADDCRON',
             token => $options{token},
-            data => {
+            data => {   
                 content => [ $definition ],
             }
         );
+        
+        # check if addcron ok
     }
+    
+    # Store discovery token // to be replaced by backend
+    $self->update_job_information(
+        values => {
+            token => $discovery_token
+        },
+        where_clause => [
+            {
+                id => $options{data}->{content}->{job_id}
+            }
+        ]
+    );
 
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
         token => $options{token},
         data => {
-            id => $token
+            message => 'job ' . $options{data}->{content}->{job_id} . ' added',
+            discovery_token => $discovery_token
         }
     );
     
     return 0;
 }
 
-sub action_launchdiscovery {
+sub action_deletehostdiscoveryjob {
     my ($self, %options) = @_;
     
     return if (!$self->is_module_installed());
+    
+    $options{token} = $self->generate_token() if (!defined($options{token}));
+
+    my $discovery_token = $options{data}->{variables}[0];
+    if (!defined($discovery_token) || $discovery_token eq '') {
+        $self->{logger}->writeLogError("[autodiscovery] Missing ':token' variable to delete discovery");
+        $self->send_log(
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            data => { message => 'missing discovery token' }
+        );
+        return 1;
+    }
+    
+    $self->send_internal_action(
+        action => 'DELETECRON',
+        token => $options{token},
+        data => {   
+            variables => [ $discovery_token ]
+        }
+    );
+    
+    $self->send_log(
+        code => GORGONE_ACTION_FINISH_OK,
+        token => $options{token},
+        data => { message => 'job ' . $discovery_token . ' deleted' }
+    );
+    
+    return 0;
+}
+
+sub action_launchhostdiscovery {
+    my ($self, %options) = @_;
+    
+    return if (!$self->is_module_installed());
+
+    if ($self->is_job_running(job_id => $options{data}->{content}->{job_id})) {
+        $self->{logger}->writeLogInfo("[autodiscovery] Job '" . $options{data}->{content}->{job_id} . "' is already running or result is being saved");
+        return 0;
+    }
 
     $self->{logger}->writeLogInfo("[autodiscovery] Launching discovery for job '" . $options{data}->{content}->{job_id} . "'");
 
@@ -203,7 +255,7 @@ sub action_launchdiscovery {
         data => [
             {
                 identity => 'gorgoneautodiscovery',
-                event => 'AUTODISCOVERYLISTENER',
+                event => 'HOSTDISCOVERYLISTENER',
                 target => $options{data}->{content}->{target},
                 token => $options{data}->{content}->{token},
                 timeout => defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/ ? 
@@ -234,22 +286,31 @@ sub action_launchdiscovery {
     );
 
     # Running
-    my $query = "UPDATE mod_host_disco_job " .
-        "SET status = '3', duration = '0', discovered_items = '0', " .
-        "creation_date = '" . strftime("%F %H:%M:%S", localtime) . "', " .
-        "token = '" . $options{data}->{content}->{token} . "', message = 'Running' " .
-        "WHERE id = '" . $options{data}->{content}->{job_id} . "'";
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-    if ($status == -1) {
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status');
-        return 1;
-    }
+    $self->update_job_information(
+        values => {
+            status => 3,
+            message => "Running",
+            duration => 0,
+            discovered_items => 0,
+            creation_date => strftime("%F %H:%M:%S", localtime)
+        },
+        where_clause => [
+            {
+                id => $options{data}->{content}->{job_id}
+            }
+        ]
+    );
 }
 
 sub discovery_command_result {
     my ($self, %options) = @_;
 
     return 1 if (!defined($options{data}->{data}->{metadata}->{job_id}));
+
+    if (!$self->job_exists(job_id => $options{data}->{data}->{metadata}->{job_id})) {
+        $self->{logger}->writeLogError("[autodiscovery] Found result for inexistant job '" . $options{data}->{data}->{metadata}->{job_id});
+        return 0;
+    }
 
     $self->{logger}->writeLogInfo("[autodiscovery] Found result for job '" . $options{data}->{data}->{metadata}->{job_id} . "'");
     my $uuid_attributes = JSON::XS->new->utf8->decode($options{data}->{data}->{metadata}->{uuid_attributes});
@@ -259,12 +320,20 @@ sub discovery_command_result {
         $options{data}->{data}->{result}->{stderr} : $options{data}->{data}->{result}->{stdout};
 
     if ($exit_code != 0) {
-        my $query = "UPDATE mod_host_disco_job " .
-            "SET status = '2', duration = '0', discovered_items = '0', " .
-            "message = " . $self->{class_object_centreon}->quote(value => $output) . " " .
-            "WHERE id = " . $self->{class_object_centreon}->quote(value => $job_id);
-        my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status') if ($status == -1);
+        # Error
+        $self->update_job_information(
+            values => {
+                status => 2,
+                message => $output,
+                duration => 0,
+                discovered_items => 0
+            },
+            where_clause => [
+                {
+                    id => $job_id
+                }
+            ]
+        );
         return 1;
     }
 
@@ -275,29 +344,39 @@ sub discovery_command_result {
 
     if ($@) {
         # Failed
-        $self->{logger}->writeLogError('[autodiscovery] Failed to decode discovery plugin response: ' . $@);
-        my $query = "UPDATE mod_host_disco_job " .
-            "SET status = '2', duration = '0', discovered_items = '0', " .
-            "message = 'Failed to decode discovery plugin response' " .
-            "WHERE id = '" . $job_id ."'";
-        my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status') if ($status == -1);
-        return 1;
+        $self->update_job_information(
+            values => {
+                status => 2,
+                message => "Failed to decode discovery plugin response",
+                duration => 0,
+                discovered_items => 0
+            },
+            where_clause => [
+                {
+                    id => $job_id
+                }
+            ]
+        );
     }
 
     # Finished
-    my $query = "UPDATE mod_host_disco_job SET status = '1', duration = '" . $result->{duration} ."', " . 
-        "discovered_items = '" . $result->{discovered_items} ."', message = 'Finished' " .
-        "WHERE id = '" . $job_id ."'";
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-    if ($status == -1) {
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status');
-        return 1;
-    }
+    $self->update_job_information(
+        values => {
+            status => 1,
+            message => "Finished",
+            duration => $result->{duration},
+            discovered_items => $result->{discovered_items}
+        },
+        where_clause => [
+            {
+                id => $job_id
+            }
+        ]
+    );
 
     # Delete previous results
-    $query = "DELETE FROM mod_host_disco_host WHERE job_id = '" . $job_id ."'";
-    $status = $self->{class_object_centreon}->transaction_query(request => $query);
+    my $query = "DELETE FROM mod_host_disco_host WHERE job_id = " . $self->{class_object_centreon}->quote(value => $job_id);
+    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError('[autodiscovery] Failed to delete previous job results');
         return 1;
@@ -319,8 +398,9 @@ sub discovery_command_result {
             substr($digest, 16, 4) . '-' . substr($digest, 20, 12);
         my $encoded_host = JSON::XS->new->utf8->encode($host);
 
-        $values .= $append . "('" . $job_id . "', " . 
-            $self->{class_object_centreon}->quote(value => $encoded_host) . ", '" . $uuid . "')";
+        $values .= $append . "(" . $self->{class_object_centreon}->quote(value => $job_id) . ", " . 
+            $self->{class_object_centreon}->quote(value => $encoded_host) . ", " . 
+            $self->{class_object_centreon}->quote(value => $uuid) . ")";
         $append = ', ';
     }
 
@@ -336,7 +416,62 @@ sub discovery_command_result {
     return 1;
 }
 
-sub action_autodiscoverylistener {
+sub update_job_information {
+    my ($self, %options) = @_;
+
+    return 1 if (!defined($options{where_clause}) || ref($options{where_clause}) ne 'ARRAY' || scalar($options{where_clause}) < 1);
+    return 1 if (!defined($options{values}) || ref($options{values}) ne 'HASH' || !keys %{$options{values}});
+    
+    my $query = "UPDATE mod_host_disco_job SET ";    
+    my $append = '';
+    foreach (keys %{$options{values}}) {
+        $query .= $append . $_ . " = " .  $self->{class_object_centreon}->quote(value => $options{values}->{$_});
+        $append = ', ';
+    }
+
+    $query .= " WHERE ";
+    $append = '';
+    foreach (@{$options{where_clause}}) {
+        my ($key, $value) = each %{$_};
+        $query .= $append . $key . " = " . $self->{class_object_centreon}->quote(value => $value);
+        $append = 'AND ';
+    }
+
+    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
+    if ($status == -1) {
+        $self->{logger}->writeLogError('[autodiscovery] Failed to update job information');
+        return 1;
+    }
+
+    return 0;
+}
+
+sub job_exists {
+    my ($self, %options) = @_;
+
+    my ($status, $data) = $self->{class_object_centreon}->custom_execute(
+        request => "SELECT id, status FROM mod_host_disco_job WHERE id = " . 
+            $self->{class_object_centreon}->quote(value => $options{job_id}),
+        mode => 2
+    );
+
+    (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
+}
+
+sub is_job_running {
+    my ($self, %options) = @_;
+
+    my ($status, $data) = $self->{class_object_centreon}->custom_execute(
+        request => "SELECT id, status FROM mod_host_disco_job WHERE id = " . 
+            $self->{class_object_centreon}->quote(value => $options{job_id}) . 
+            " AND status IN ('3', '4')", # 'Running' and 'Save running'
+        mode => 2
+    );
+
+    (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
+}
+
+sub action_hostdiscoverylistener {
     my ($self, %options) = @_;
 
     return if (!$self->is_module_installed());
@@ -346,13 +481,20 @@ sub action_autodiscoverylistener {
         $self->discovery_command_result(%options);
         return 1;
     }
-    if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
-        my $query = "UPDATE mod_host_disco_job " .
-            "SET status = '2', duration = '0', discovered_items = '0', " .
-            "message = " . $self->{class_object_centreon}->quote(value => $options{data}->{message}) . " " .
-            "WHERE token = " . $self->{class_object_centreon}->quote(value => $options{token});
-        my $status = $self->{class_object_centreon}->transaction_query(request => $query);
-        $self->{logger}->writeLogError('[autodiscovery] Failed to update job status') if ($status == -1);
+    if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {        
+        $self->update_job_information(
+            values => {
+                status => 2,
+                message => $options{data}->{message},
+                duration => 0,
+                discovered_items => 0
+            },
+            where_clause => [
+                {
+                    token => $options{token}
+                }
+            ]
+        );
         return 1;
     }
 
@@ -373,14 +515,14 @@ sub register_listener {
 
     # Sync logs and try to retrieve results for each jobs
     foreach my $job_id (keys %$data) {
-        $self->{logger}->writeLogDebug("[autodiscovery] register listener for '" . $job_id . "'");
+        $self->{logger}->writeLogDebug("[autodiscovery] Register listener for '" . $job_id . "'");
 
         $self->send_internal_action(
             action => 'ADDLISTENER',
             data => [
                 {
                     identity => 'gorgoneautodiscovery',
-                    event => 'AUTODISCOVERYLISTENER',
+                    event => 'HOSTDISCOVERYLISTENER',
                     target => $data->{$job_id}->{monitoring_server_id},
                     token => $data->{$job_id}->{token},
                     log_pace => $self->{check_interval}

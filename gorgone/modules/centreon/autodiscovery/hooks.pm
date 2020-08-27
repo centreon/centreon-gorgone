@@ -31,10 +31,11 @@ use constant NAMESPACE => 'centreon';
 use constant NAME => 'autodiscovery';
 use constant EVENTS => [
     { event => 'AUTODISCOVERYREADY' },
-    { event => 'AUTODISCOVERYLISTENER' },
+    { event => 'HOSTDISCOVERYLISTENER' },
     { event => 'SERVICEDISCOVERYLISTENER' },
-    { event => 'ADDDISCOVERYJOB', uri => '/job', method => 'POST' },
-    { event => 'LAUNCHDISCOVERY' },
+    { event => 'ADDHOSTDISCOVERYJOB', uri => '/job', method => 'POST' },
+    { event => 'DELETEHOSTDISCOVERYJOB', uri => '/hosts', method => 'DELETE' },
+    { event => 'LAUNCHHOSTDISCOVERY' },
     { event => 'LAUNCHSERVICEDISCOVERY', uri => '/services', method => 'POST' },
 ];
 

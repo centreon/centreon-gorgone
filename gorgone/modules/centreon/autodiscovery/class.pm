@@ -35,6 +35,14 @@ use Time::HiRes;
 use POSIX qw(strftime);
 use Digest::MD5 qw(md5_hex);
 
+use constant JOB_SCHEDULED => 0;
+use constant JOB_FINISH => 1;
+use constant JOB_FAILED => 2;
+use constant JOB_RUNNING => 3;
+use constant SAVE_RUNNING => 4;
+use constant SAVE_FINISH => 5;
+use constant SAVE_FAILED => 6;
+
 use constant MAX_INSERT_BY_QUERY => 100;
 
 my %handlers = (TERM => {}, HUP => {});
@@ -123,12 +131,29 @@ sub action_addhostdiscoveryjob {
             "WHERE mhdj.provider_id = mhdp.id AND mhdj.id = " .
             $self->{class_object_centreon}->quote(value => $options{data}->{content}->{job_id});
         my ($status, $result) = $self->{class_object_centreon}->custom_execute(request => $query, mode => 2);
-        if ($status == -1) {
-            $self->{logger}->writeLogError('[autodiscovery] Failed to retrieve uuid attributes');
+        if ($status == -1 || !defined($result->[0]->[0]) || $result->[0]->[0] eq '') {
+            $self->{logger}->writeLogError('[autodiscovery] Failed to retrieve UUID attributes');
             return 1;
         }
         
         $uuid_attributes = JSON::XS->new->utf8->decode($result->[0]->[0]);
+
+        if ($@) {
+            $self->update_job_information(                
+                values => {
+                    status => JOB_FAILED,
+                    message => "Failed to decode UUID attributes",
+                    duration => 0,
+                    discovered_items => 0
+                },
+                where_clause => [
+                    {
+                        id => $options{data}->{content}->{job_id}
+                    }
+                ]
+            );
+            return 1;
+        }
     }
 
     my $timeout = (defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/) ?
@@ -153,6 +178,22 @@ sub action_addhostdiscoveryjob {
         if (!defined($options{data}->{content}->{execution}->{parameters}->{cron_definition}) ||
             $options{data}->{content}->{execution}->{parameters}->{cron_definition} eq '') {
             $self->{logger}->writeLogError("[autodiscovery] Missing 'cron_definition' parameter");
+
+            $self->update_job_information(
+                
+                values => {
+                    status => JOB_FAILED,
+                    message => "Missing 'cron_definition' parameter",
+                    duration => 0,
+                    discovered_items => 0
+                },
+                where_clause => [
+                    {
+                        id => $options{data}->{content}->{job_id}
+                    }
+                ]
+            );
+
             return 1;
         }
 
@@ -186,7 +227,7 @@ sub action_addhostdiscoveryjob {
         # TODO: check if addcron ok
     }
     
-    # Store discovery token // to be replaced by backend
+    # Store discovery token // to be replaced by backend at some point
     return 1 if ($self->update_job_information(
         values => {
             token => $discovery_token
@@ -308,11 +349,10 @@ sub action_launchhostdiscovery {
     # Running
     return 1 if ($self->update_job_information(
         values => {
-            status => 3,
+            status => JOB_RUNNING,
             message => "Running",
             duration => 0,
-            discovered_items => 0,
-            creation_date => strftime("%F %H:%M:%S", localtime)
+            discovered_items => 0
         },
         where_clause => [
             {
@@ -348,7 +388,7 @@ sub discovery_command_result {
         # Error
         $self->update_job_information(
             values => {
-                status => 2,
+                status => JOB_FAILED,
                 message => $output,
                 duration => 0,
                 discovered_items => 0
@@ -370,8 +410,9 @@ sub discovery_command_result {
     if ($@) {
         # Failed
         $self->update_job_information(
+            
             values => {
-                status => 2,
+                status => JOB_FAILED,
                 message => "Failed to decode discovery plugin response",
                 duration => 0,
                 discovered_items => 0
@@ -388,7 +429,7 @@ sub discovery_command_result {
     # Finished
     return 1 if ($self->update_job_information(
         values => {
-            status => 1,
+            status => JOB_FINISH,
             message => "Finished",
             duration => $result->{duration},
             discovered_items => $result->{discovered_items}
@@ -462,7 +503,7 @@ sub update_job_information {
     return 1 if (!defined($options{where_clause}) || ref($options{where_clause}) ne 'ARRAY' || scalar($options{where_clause}) < 1);
     return 1 if (!defined($options{values}) || ref($options{values}) ne 'HASH' || !keys %{$options{values}});
     
-    my $query = "UPDATE mod_host_disco_job SET ";    
+    my $query = "UPDATE mod_host_disco_job SET ";
     my $append = '';
     foreach (keys %{$options{values}}) {
         $query .= $append . $_ . " = " .  $self->{class_object_centreon}->quote(value => $options{values}->{$_});
@@ -508,7 +549,11 @@ sub is_job_running {
     my ($status, $data) = $self->{class_object_centreon}->custom_execute(
         request => "SELECT id, status FROM mod_host_disco_job WHERE id = " . 
             $self->{class_object_centreon}->quote(value => $options{job_id}) . 
-            " AND status IN ('3', '4')", # 'Running' and 'Save running'
+            " AND status IN (" .
+            $self->{class_object_centreon}->quote(value => JOB_RUNNING) .
+            "," .
+            $self->{class_object_centreon}->quote(value => SAVE_RUNNING) .
+            ")",
         mode => 2
     );
     if ($status == -1) {
@@ -532,7 +577,7 @@ sub action_hostdiscoverylistener {
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {        
         $self->update_job_information(
             values => {
-                status => 2,
+                status => JOB_FAILED,
                 message => $options{data}->{message},
                 duration => 0,
                 discovered_items => 0

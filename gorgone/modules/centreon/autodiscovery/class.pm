@@ -27,6 +27,8 @@ use warnings;
 use gorgone::standard::library;
 use gorgone::standard::constants qw(:all);
 use gorgone::modules::centreon::autodiscovery::services::discovery;
+use gorgone::class::tpapi::clapi;
+use gorgone::class::tpapi::centreonv2;
 use gorgone::class::sqlquery;
 use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
@@ -50,25 +52,19 @@ my ($connector);
 
 sub new {
     my ($class, %options) = @_;
-
-    $connector  = {};
-    $connector->{internal_socket} = undef;
-    $connector->{module_id} = $options{module_id};
-    $connector->{logger} = $options{logger};
-    $connector->{config} = $options{config};
-    $connector->{config_core} = $options{config_core};
-    $connector->{config_db_centreon} = $options{config_db_centreon};
-    $connector->{config_db_centstorage} = $options{config_db_centstorage};
-    $connector->{stop} = 0;
+    $connector = $class->SUPER::new(%options);
+    bless $connector, $class;
 
     $connector->{global_timeout} = (defined($options{config}->{global_timeout}) &&
         $options{config}->{global_timeout} =~ /(\d+)/) ? $1 : 300;
     $connector->{check_interval} = (defined($options{config}->{check_interval}) &&
         $options{config}->{check_interval} =~ /(\d+)/) ? $1 : 15;
+    $connector->{tpapi_clapi_name} = defined($options{config}->{tpapi_clapi}) && $options{config}->{tpapi_clapi} ne '' ? $options{config}->{tpapi_clapi} : 'clapi';
+    $connector->{tpapi_centreonv2_name} = defined($options{config}->{tpapi_centreonv2}) && $options{config}->{tpapi_centreonv2} ne '' ? 
+        $options{config}->{tpapi_centreonv2} : 'centreonv2';
 
     $connector->{service_discoveries} = {};
 
-    bless $connector, $class;
     $connector->set_signal_handlers();
     return $connector;
 }
@@ -719,7 +715,22 @@ sub event {
 
 sub run {
     my ($self, %options) = @_;
-    
+
+    $self->{tpapi_clapi} = gorgone::class::tpapi::clapi->new();
+    $self->{tpapi_clapi}->set_configuration(
+        config => $self->{tpapi}->get_configuration(name => $self->{tpapi_clapi_name})
+    );
+    $self->{tpapi_centreonv2} = gorgone::class::tpapi::centreonv2->new();
+    $self->{tpapi_centreonv2}->set_configuration(
+        config => $self->{tpapi}->get_configuration(name => $self->{tpapi_centreonv2_name}),
+        logger => $self->{logger}
+    );
+    # test
+    my ($status, $result) = $self->{tpapi_centreonv2}->get_monitoring_hosts(
+        search => '{"host.name":"IP-Label"}'
+    );
+    #print "=========$status====" . $self->{tpapi_centreonv2}->error() . "===\n";
+
     $self->{db_centreon} = gorgone::class::db->new(
         dsn => $self->{config_db_centreon}->{dsn},
         user => $self->{config_db_centreon}->{username},

@@ -789,7 +789,7 @@ sub launchdiscovery {
         return -1;
     }
 
-    if (!defined($self->{tpapi_clapi}) || !defined($self->{tpapi_clapi}->get_username())) {
+    if (!defined($self->{tpapi_clapi}->get_username())) {
         $self->send_log_msg_error(token => $options{token}, subname => 'servicediscovery', number => $self->{uuid}, message => 'clapi ' . $self->{tpapi_clapi}->error());
         return -1;
     }

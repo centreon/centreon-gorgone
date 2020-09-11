@@ -662,6 +662,7 @@ sub action_launchservicediscovery {
     my $svc_discovery = gorgone::modules::centreon::autodiscovery::services::discovery->new(
         module_id => $self->{module_id},
         logger => $self->{logger},
+        tpapi_clapi => $self->{tpapi_clapi},
         internal_socket => $self->{internal_socket},
         config => $self->{config},
         config_core => $self->{config_core},

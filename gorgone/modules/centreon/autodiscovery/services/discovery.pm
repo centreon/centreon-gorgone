@@ -40,6 +40,7 @@ sub new {
     $connector->{logger} = $options{logger};
     $connector->{config} = $options{config};
     $connector->{config_core} = $options{config_core};
+    $connector->{tpapi_clapi} = $options{tpapi_clapi};
     $connector->{class_object_centreon} = $options{class_object_centreon};
     $connector->{class_object_centstorage} = $options{class_object_centstorage};
     $connector->{mail_command} = defined($connector->{config}->{mail_command}) ? $connector->{config}->{mail_command} : '/bin/mail';
@@ -788,7 +789,7 @@ sub launchdiscovery {
         return -1;
     }
 
-    if (!defined($self->{tpapi_clapi}->get_username())) {
+    if (!defined($self->{tpapi_clapi}) || !defined($self->{tpapi_clapi}->get_username())) {
         $self->send_log_msg_error(token => $options{token}, subname => 'servicediscovery', number => $self->{uuid}, message => 'clapi ' . $self->{tpapi_clapi}->error());
         return -1;
     }

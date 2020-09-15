@@ -156,6 +156,9 @@ sub hdisco_sync {
             $self->{hdisco_jobs_tokens}->{ $job->{token} } = \$self->{hdisco_jobs_ids}->{ $job->{job_id} };
         }
 
+        # TODO
+        # Need to add cron. If: mode == 1 (not 0) et cron_added == CRON_ADDED_NONE|CRON_ADDED_KO
+
         $jobs->{ $job->{job_id} } = 1;
     }
 
@@ -378,6 +381,9 @@ sub action_launchhostdiscovery {
     } elsif ($running == -1) {
         return 1;
     }
+
+    # TODO:
+    # If the job is paused, we skip!!!!
 
     $self->{logger}->writeLogInfo("[autodiscovery] Launching discovery for job '" . $options{data}->{content}->{job_id} . "'");
 

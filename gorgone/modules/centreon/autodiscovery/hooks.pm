@@ -31,7 +31,7 @@ use constant NAMESPACE => 'centreon';
 use constant NAME => 'autodiscovery';
 use constant EVENTS => [
     { event => 'AUTODISCOVERYREADY' },
-    { event => 'HOSTDISCOVERYLISTENER' },
+    { event => 'HOSTDISCOVERYJOBLISTENER' },
     { event => 'SERVICEDISCOVERYLISTENER' },
     { event => 'ADDHOSTDISCOVERYJOB', uri => '/hosts', method => 'POST' },
     { event => 'DELETEHOSTDISCOVERYJOB', uri => '/hosts', method => 'DELETE' },

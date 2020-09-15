@@ -167,13 +167,19 @@ sub request {
 
     return 1 if ($self->{is_logged} == 0);
 
+    # TODO: manage it properly
+    my $get_param = ['page=1', 'limit=10000'];
+    if (defined($options{get_param})) {
+        push @$get_param, @{$options{get_param}};
+    }
+
     my ($code, $content) = $self->{http}->request(
         http_backend => $self->{http_backend},
         method => $options{method},
         hostname => '',
         full_url => $self->{base_url} . $options{endpoint},
         query_form_post => $options{query_form_post},
-        get_param => $options{get_param}, # ['per_page=1000', 'since=' . $old_iso8601]
+        get_param => $get_param,
         header => [
             'Accept-Type: application/json; charset=utf-8',
             'Content-Type: application/json; charset=utf-8',
@@ -221,6 +227,43 @@ sub get_monitoring_hosts {
         method => 'GET',
         endpoint => $endpoint,
         get_param => $get_param
+    );
+}
+
+sub get_scheduling_jobs {
+    my ($self, %options) = @_;
+
+    my $results = [
+        {
+            execution => {
+                parameters => {
+                    cron_definiton => "*/5 * * * *",
+                    is_paused => 0
+                },
+                mode => 1
+            },
+            post_execution => {
+                commands => [
+                    {
+                        action => 'COMMAND',
+                        command_line => '/usr/share/centreon/www/modules/centreon-autodiscovery-server/script/run_save_discovered_host --all --job-id=9'
+                    }
+                ]
+            },
+            job_id => 9,
+            token => "discovery_9_f2b0ea11",
+            command_line => "/usr/lib/centreon/plugins/centreon_generic_snmp.pl --plugin=os::linux::local::plugin --mode=discovery-snmp --subnet='192.168.1.28/32' --snmp-community='public' --snmp-version='2c' --snmp-port='161' --snmp-timeout='1' \$_EXTRAOPTIONS\$",
+            target => 1,
+            status => 1,
+            last_execution => undef
+        }
+    ];
+    return (0, $results);
+
+    my $endpoint = '/auto-discovery/scheduling/jobs';
+    return $self->request(
+        method => 'GET',
+        endpoint => $endpoint
     );
 }
 

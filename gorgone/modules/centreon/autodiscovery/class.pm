@@ -45,6 +45,11 @@ use constant SAVE_RUNNING => 4;
 use constant SAVE_FINISH => 5;
 use constant SAVE_FAILED => 6;
 
+use constant CRON_ADDED_NONE => 0;
+use constant CRON_ADDED_OK => 1;
+use constant CRON_ADDED_KO => 2;
+use constant CRON_ADDED_PROGRESS => 3;
+
 use constant MAX_INSERT_BY_QUERY => 100;
 
 my %handlers = (TERM => {}, HUP => {});
@@ -62,6 +67,11 @@ sub new {
     $connector->{tpapi_clapi_name} = defined($options{config}->{tpapi_clapi}) && $options{config}->{tpapi_clapi} ne '' ? $options{config}->{tpapi_clapi} : 'clapi';
     $connector->{tpapi_centreonv2_name} = defined($options{config}->{tpapi_centreonv2}) && $options{config}->{tpapi_centreonv2} ne '' ? 
         $options{config}->{tpapi_centreonv2} : 'centreonv2';
+
+    $connector->{hdisco_synced} = 0;
+    $connector->{hdisco_synced_time} = -1;
+    $connector->{hdisco_jobs_tokens} = {};
+    $connector->{hdisco_jobs_ids} = {};
 
     $connector->{service_discoveries} = {};
 
@@ -107,16 +117,89 @@ sub class_handle_HUP {
 Host Discovery part
 *******************
 
+For cron job, we use discovery token as cron ID.
+
 =cut
+
+sub hdisco_sync {
+    my ($self, %options) = @_;
+
+    return if ($self->{hdisco_synced} == 1 && (time() - $self->{hdisco_synced_time}) < 600);
+
+    $self->{logger}->writeLogInfo('[autodiscovery] -class- host discovery sync');
+
+    my ($status, $results) = $self->{tpapi_centreonv2}->get_scheduling_jobs();
+    if ($status != 0) {
+        $self->{logger}->writeLogError('[autodiscovery] -class- cannot get host discovery jobs - ' . $self->{tpapi_centreonv2}->error());
+        return ;
+    }
+
+    my $jobs = {};
+    foreach my $job (@$results) {
+        my $cron_added = CRON_ADDED_NONE;
+        if (defined($self->{hdisco_jobs_ids}->{ $job->{job_id} })) {
+            $cron_added = $self->{hdisco_jobs_ids}->{ $job->{job_id} }->{cron_added};
+        } else {
+            $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery sync - new job '" . $job->{job_id} . "'");
+            if ($job->{status} == JOB_RUNNING) {
+                $self->hdisco_add_joblistener(
+                    jobs => [
+                        { job_id => $job->{job_id}, target => $job->{target}, token => $job->{token} }
+                    ]
+                );
+            }
+        }
+
+        $self->{hdisco_jobs_ids}->{ $job->{job_id} } = $job;
+        $self->{hdisco_jobs_ids}->{ $job->{job_id} }->{cron_added} = $cron_added;
+        if (defined($job->{token})) {
+            $self->{hdisco_jobs_tokens}->{ $job->{token} } = \$self->{hdisco_jobs_ids}->{ $job->{job_id} };
+        }
+
+        $jobs->{ $job->{job_id} } = 1;
+    }
+
+    foreach my $job_id (keys %{$self->{hdisco_jobs_ids}}) {
+        next if (defined($jobs->{$job_id}));
+
+        $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery sync - delete job '" . $job_id . "'");
+        if (defined($self->{hdisco_jobs_ids}->{$job_id}->{token})) {
+            $self->hdisco_delete_cron(discovery_token => $self->{hdisco_jobs_ids}->{$job_id}->{token});
+            delete $self->{hdisco_jobs_tokens}->{ $self->{hdisco_jobs_ids}->{$job_id}->{token} };
+        }
+        delete $self->{hdisco_jobs_ids}->{$job_id};
+    }
+
+    $self->{hdisco_synced_time} = time();
+    $self->{hdisco_synced} = 1;
+}
+
+sub hdisco_delete_cron {
+    my ($self, %options) = @_;
+
+    return if (!defined($self->{hdisco_jobs_tokens}->{ $options{discovery_token} }));
+    return if (
+        $self->{hdisco_jobs_tokens}->{ $options{discovery_token} }->{cron_added} == CRON_ADDED_NONE ||
+        $self->{hdisco_jobs_tokens}->{ $options{discovery_token} }->{cron_added} == CRON_ADDED_KO
+    );
+
+    $self->send_internal_action(
+        action => 'DELETECRON',
+        token => $options{token},
+        data => {   
+            variables => [ $options{discovery_token} ]
+        }
+    );
+}
 
 sub action_addhostdiscoveryjob {
     my ($self, %options) = @_;
     
-    return if (!$self->is_module_installed());
+    return if (!$self->is_hdisco_synced());
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
     my $discovery_token = 'discovery_' . $options{data}->{content}->{job_id} . '_' . $self->generate_token(length => 4);
-    
+
     my $uuid_attributes = $options{data}->{content}->{uuid_attributes};
 
     if (!defined($uuid_attributes)) {
@@ -176,7 +259,6 @@ sub action_addhostdiscoveryjob {
             $self->{logger}->writeLogError("[autodiscovery] Missing 'cron_definition' parameter");
 
             $self->update_job_information(
-                
                 values => {
                     status => JOB_FAILED,
                     message => "Missing 'cron_definition' parameter",
@@ -250,11 +332,11 @@ sub action_addhostdiscoveryjob {
 sub action_deletehostdiscoveryjob {
     my ($self, %options) = @_;
     
-    return if (!$self->is_module_installed());
+    return if (!$self->is_hdisco_synced());
     
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
-    my $discovery_token = $options{data}->{variables}[0];
+    my $discovery_token = $options{data}->{variables}->[0];
     if (!defined($discovery_token) || $discovery_token eq '') {
         $self->{logger}->writeLogError("[autodiscovery] Missing ':token' variable to delete discovery");
         $self->send_log(
@@ -264,17 +346,9 @@ sub action_deletehostdiscoveryjob {
         );
         return 1;
     }
-    
-    $self->send_internal_action(
-        action => 'DELETECRON',
-        token => $options{token},
-        data => {   
-            variables => [ $discovery_token ]
-        }
 
-        # TODO: check if deletecron ok
-    );
-    
+    $self->hdisco_delete_cron(discovery_token => $discovery_token);
+
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
         token => $options{token},
@@ -287,7 +361,7 @@ sub action_deletehostdiscoveryjob {
 sub action_launchhostdiscovery {
     my ($self, %options) = @_;
     
-    return if (!$self->is_module_installed());
+    return if (!$self->is_hdisco_synced());
 
     my $exists = $self->job_exists(job_id => $options{data}->{content}->{job_id});
     if ($exists == 0) {
@@ -560,10 +634,10 @@ sub is_job_running {
     (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
 }
 
-sub action_hostdiscoverylistener {
+sub action_hostdiscoveryjoblistener {
     my ($self, %options) = @_;
 
-    return if (!$self->is_module_installed());
+    return if (!$self->is_hdisco_synced());
     return 0 if (!defined($options{token}));
 
     if ($options{data}->{code} == GORGONE_MODULE_ACTION_COMMAND_RESULT) {
@@ -590,30 +664,20 @@ sub action_hostdiscoverylistener {
     return 1;
 }
 
-sub register_listener {
+sub hdisco_add_joblistener {
     my ($self, %options) = @_;
     
-    return if (!$self->is_module_installed());
-    
-    # List running jobs
-    my ($status, $data) = $self->{class_object_centreon}->custom_execute(
-        request => "SELECT id, monitoring_server_id, token FROM mod_host_disco_job WHERE status = '3'",
-        mode => 1,
-        keys => 'id'
-    );
-
-    # Sync logs and try to retrieve results for each jobs
-    foreach my $job_id (keys %$data) {
-        $self->{logger}->writeLogDebug("[autodiscovery] Register listener for '" . $job_id . "'");
+    foreach (@{$options{jobs}}) {
+        $self->{logger}->writeLogDebug("[autodiscovery] -class- register listener for '" . $_->{job_id} . "'");
 
         $self->send_internal_action(
             action => 'ADDLISTENER',
             data => [
                 {
                     identity => 'gorgoneautodiscovery',
-                    event => 'HOSTDISCOVERYLISTENER',
-                    target => $data->{$job_id}->{monitoring_server_id},
-                    token => $data->{$job_id}->{token},
+                    event => 'HOSTDISCOVERYJOBLISTENER',
+                    target => $_->{target},
+                    token => $_->{token},
                     log_pace => $self->{check_interval}
                 }
             ]
@@ -685,15 +749,10 @@ sub action_launchservicediscovery {
     }
 }
 
-sub is_module_installed {
+sub is_hdisco_synced {
     my ($self) = @_;
 
-    my ($status, $data) = $self->{class_object_centreon}->custom_execute(
-        request => "SELECT id FROM modules_informations WHERE name = 'centreon-autodiscovery-server'",
-        mode => 2
-    );
-
-    (defined($data->[0]) && scalar($data->[0]) > 0) ? return 1 : return 0;
+    return $self->{hdisco_synced} == 1 ? 1 : 0;
 }
 
 sub event {
@@ -726,11 +785,6 @@ sub run {
         config => $self->{tpapi}->get_configuration(name => $self->{tpapi_centreonv2_name}),
         logger => $self->{logger}
     );
-    # test
-    my ($status, $result) = $self->{tpapi_centreonv2}->get_monitoring_hosts(
-        search => '{"host.name":"IP-Label"}'
-    );
-    #print "=========$status====" . $self->{tpapi_centreonv2}->error() . "===\n";
 
     $self->{db_centreon} = gorgone::class::db->new(
         dsn => $self->{config_db_centreon}->{dsn},
@@ -776,9 +830,9 @@ sub run {
         }
     ];
 
-    $self->register_listener();
-
     while (1) {
+        $self->hdisco_sync();
+
         # we try to do all we can
         my $rev = zmq_poll($self->{poll}, 5000);
         if (defined($rev) && $rev == 0 && $self->{stop} == 1) {

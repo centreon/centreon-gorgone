@@ -314,7 +314,7 @@ sub action_deletecron {
 
     $self->{logger}->writeLogDebug("[cron] Cron delete start");
     
-    my $id = $options{data}->{variables}[0];
+    my $id = $options{data}->{variables}->[0];
     if (!defined($id) || $id eq '') {
         $self->{logger}->writeLogError("[cron] Cron delete missing id");
         $self->send_log(

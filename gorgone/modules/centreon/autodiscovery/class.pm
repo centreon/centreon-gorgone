@@ -209,6 +209,8 @@ sub hdisco_addupdate_job {
         $self->{hdisco_jobs_tokens}->{ $options{job}->{token} } = $options{job}->{job_id};
     }
 
+    # TODO: need to manage the case if it's an update and cron had changed!!
+
     if ($self->{hdisco_jobs_ids}->{ $options{job}->{job_id} }->{execution}->{mode} == EXECUTION_MODE_CRON &&
         ($extra_infos->{cron_added} == CRON_ADDED_NONE || $extra_infos->{cron_added} == CRON_ADDED_KO)
     ) {
@@ -287,7 +289,7 @@ sub action_addhostdiscoveryjob {
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
             data => {
-                message => 'host discovery sync not done'
+                message => 'host discovery synchronization issue'
             }
         );
         return ;
@@ -451,6 +453,8 @@ sub action_launchhostdiscovery {
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
+    # TODO: Need to get the value from the API: if it's in pause, we don't have the last update (that's why)
+
     my ($status, $message) = $self->launchhostdiscovery(%options);
     if ($status) {
         $self->send_log(
@@ -520,7 +524,6 @@ sub discovery_command_result {
     if ($@) {
         # Failed
         $self->update_job_information(
-            
             values => {
                 status => JOB_FAILED,
                 message => "Failed to decode discovery plugin response",
@@ -609,9 +612,13 @@ sub discovery_command_result {
 
 sub action_deletehostdiscoveryjob {
     my ($self, %options) = @_;
-    
+
     return if (!$self->is_hdisco_synced());
-    
+
+    # TODO:
+    #   delete is call when it's in pause (execution_mode 2).
+    #   in fact, we do a curl to sync. If don't exist in database, we remove it. otherwise we do nothing
+
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
     my $discovery_token = $options{data}->{variables}->[0];

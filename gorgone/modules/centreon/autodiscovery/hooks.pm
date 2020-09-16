@@ -32,6 +32,7 @@ use constant NAME => 'autodiscovery';
 use constant EVENTS => [
     { event => 'AUTODISCOVERYREADY' },
     { event => 'HOSTDISCOVERYJOBLISTENER' },
+    { event => 'HOSTDISCOVERYCRONLISTENER' },
     { event => 'SERVICEDISCOVERYLISTENER' },
     { event => 'ADDHOSTDISCOVERYJOB', uri => '/hosts', method => 'POST' },
     { event => 'DELETEHOSTDISCOVERYJOB', uri => '/hosts', method => 'DELETE' },

@@ -237,7 +237,7 @@ sub get_scheduling_jobs {
         {
             execution => {
                 parameters => {
-                    cron_definiton => "*/5 * * * *",
+                    cron_definition => "*/5 * * * *",
                     is_paused => 0
                 },
                 mode => 1
@@ -255,15 +255,22 @@ sub get_scheduling_jobs {
             command_line => "/usr/lib/centreon/plugins/centreon_generic_snmp.pl --plugin=os::linux::local::plugin --mode=discovery-snmp --subnet='192.168.1.28/32' --snmp-community='public' --snmp-version='2c' --snmp-port='161' --snmp-timeout='1' \$_EXTRAOPTIONS\$",
             target => 1,
             status => 1,
-            last_execution => undef
+            last_execution => undef,
+            uuid_attributes => ["hostname", "ip"]
         }
     ];
     return (0, $results);
 
+    my $get_param;
+    if (defined($options{search})) {
+        $get_param = ['search=' . $options{search}];
+    }
+
     my $endpoint = '/auto-discovery/scheduling/jobs';
     return $self->request(
         method => 'GET',
-        endpoint => $endpoint
+        endpoint => $endpoint,
+        get_param => $get_param
     );
 }
 

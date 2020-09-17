@@ -152,8 +152,7 @@ sub hdisco_add_cron {
         parameters =>  {
             job_id => $options{job}->{job_id},
             timeout => $self->{global_timeout}
-        },
-        keep_token => 1
+        }
     };
     $self->send_internal_action(
         action => 'ADDCRON',
@@ -409,7 +408,7 @@ sub launchhostdiscovery {
     
     return (1, 'host discovery sync not done') if (!$self->is_hdisco_synced());
 
-    if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }) {
+    if (!defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
         return (1, 'trying to launch discovery for inexistant job');
     }
     if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status} == JOB_RUNNING) {
@@ -444,7 +443,7 @@ sub launchhostdiscovery {
         data => [
             {
                 identity => 'gorgoneautodiscovery',
-                event => 'HOSTDISCOVERYLISTENER',
+                event => 'HOSTDISCOVERYJOBLISTENER',
                 target => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{target},
                 token => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{token},
                 timeout => defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/ ? 
@@ -532,6 +531,7 @@ sub action_launchhostdiscovery {
 
     ($status, $message) = $self->launchhostdiscovery(%options);
     if ($status) {
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - launch discovery job '$options{data}->{content}->{job_id}' - $message");
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
@@ -559,9 +559,9 @@ sub discovery_command_result {
     return 1 if (!defined($options{data}->{data}->{metadata}->{job_id}));
 
     my $job_id = $options{data}->{data}->{metadata}->{job_id};
-    if ($self->{hdisco_jobs_ids}->{$job_id}) {
+    if (!defined($self->{hdisco_jobs_ids}->{$job_id})) {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - found result for inexistant job '" . $job_id . "'");
-        return 0;
+        return 1;
     }
 
     $self->{logger}->writeLogInfo("[autodiscovery] -class- host discovery - found result for job '" . $job_id . "'");
@@ -596,7 +596,7 @@ sub discovery_command_result {
 
     # Delete previous results
     my $query = "DELETE FROM mod_host_disco_host WHERE job_id = " . $self->{class_object_centreon}->quote(value => $job_id);
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
+    my $status = $self->{class_object_centreon}->custom_execute(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to delete previous job '$job_id' results");
         $self->update_job_status(
@@ -614,7 +614,7 @@ sub discovery_command_result {
     $query = "INSERT INTO mod_host_disco_host (job_id, discovery_result, uuid) VALUES ";
     foreach my $host (@{$result->{results}}) {
         if ($number_of_lines == MAX_INSERT_BY_QUERY) {
-            $status = $self->{class_object_centreon}->transaction_query(request => $query . $values);
+            $status = $self->{class_object_centreon}->custom_execute(request => $query . $values);
             if ($status == -1) {
                 $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to insert job '$job_id' results");
                 $self->update_job_status(
@@ -650,7 +650,7 @@ sub discovery_command_result {
     }
 
     if ($values ne '') {
-        $status = $self->{class_object_centreon}->transaction_query(request => $query . $values);
+        $status = $self->{class_object_centreon}->custom_execute(request => $query . $values);
         if ($status == -1) {
             $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to insert job '$job_id' results");
             $self->update_job_status(
@@ -671,7 +671,7 @@ sub discovery_command_result {
             data => [
                 {
                     identity => 'gorgoneautodiscovery',
-                    event => 'HOSTDISCOVERYLISTENER',
+                    event => 'HOSTDISCOVERYJOBLISTENER',
                     token => $self->{hdisco_jobs_ids}->{$job_id}->{token}
                 }
             ]
@@ -811,7 +811,7 @@ sub update_job_information {
         $append = 'AND ';
     }
 
-    my $status = $self->{class_object_centreon}->transaction_query(request => $query);
+    my $status = $self->{class_object_centreon}->custom_execute(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError('[autodiscovery] Failed to update job information');
         return -1;

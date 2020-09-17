@@ -237,7 +237,7 @@ sub get_scheduling_jobs {
         {
             execution => {
                 parameters => {
-                    cron_definition => "*/5 * * * *",
+                    cron_definition => "* * * * *",
                     is_paused => 0
                 },
                 mode => 1
@@ -252,7 +252,7 @@ sub get_scheduling_jobs {
             },
             job_id => 9,
             token => "discovery_9_f2b0ea11",
-            command_line => "/usr/lib/centreon/plugins/centreon_generic_snmp.pl --plugin=os::linux::local::plugin --mode=discovery-snmp --subnet='192.168.1.28/32' --snmp-community='public' --snmp-version='2c' --snmp-port='161' --snmp-timeout='1' \$_EXTRAOPTIONS\$",
+            command_line => "/usr/lib/centreon/plugins/centreon_generic_snmp.pl --plugin=os::linux::local::plugin --mode=discovery-snmp --subnet='127.0.0.1/32' --snmp-community='public' --snmp-version='2c' --snmp-port='161' --snmp-timeout='1' \$_EXTRAOPTIONS\$",
             target => 1,
             status => 1,
             last_execution => undef,

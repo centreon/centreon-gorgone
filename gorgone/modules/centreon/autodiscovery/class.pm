@@ -553,6 +553,39 @@ sub action_launchhostdiscovery {
     );
 }
 
+sub discovery_postcommand_result {
+    my ($self, %options) = @_;
+
+    return 1 if (!defined($options{data}->{data}->{metadata}->{job_id}));
+
+    my $job_id = $options{data}->{data}->{metadata}->{job_id};
+    if (!defined($self->{hdisco_jobs_ids}->{$job_id})) {
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - found result for inexistant job '" . $job_id . "'");
+        return 1;
+    }
+
+    my $exit_code = $options{data}->{data}->{result}->{exit_code};
+    my $output = (defined($options{data}->{data}->{result}->{stderr}) && $options{data}->{data}->{result}->{stderr} ne '') ?
+        $options{data}->{data}->{result}->{stderr} : $options{data}->{data}->{result}->{stdout};
+
+    if ($exit_code != 0) {
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - execute discovery postcommand failed job '$job_id'");
+        $self->update_job_status(
+            job_id => $job_id,
+            status => JOB_FAILED,
+            message => $output
+        );
+        return 1;
+    }
+
+    $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - finished discovery postcommand job '$job_id'");
+    $self->update_job_status(
+        job_id => $job_id,
+        status => JOB_FINISH,
+        message => 'Finished'
+    );
+}
+
 sub discovery_command_result {
     my ($self, %options) = @_;
 
@@ -571,6 +604,7 @@ sub discovery_command_result {
         $options{data}->{data}->{result}->{stderr} : $options{data}->{data}->{result}->{stdout};
 
     if ($exit_code != 0) {
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - execute discovery plugin failed job '$job_id'");
         $self->update_job_status(
             job_id => $job_id,
             status => JOB_FAILED,
@@ -596,7 +630,7 @@ sub discovery_command_result {
 
     # Delete previous results
     my $query = "DELETE FROM mod_host_disco_host WHERE job_id = " . $self->{class_object_centreon}->quote(value => $job_id);
-    my $status = $self->{class_object_centreon}->custom_execute(request => $query);
+    my ($status) = $self->{class_object_centreon}->custom_execute(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to delete previous job '$job_id' results");
         $self->update_job_status(
@@ -614,7 +648,7 @@ sub discovery_command_result {
     $query = "INSERT INTO mod_host_disco_host (job_id, discovery_result, uuid) VALUES ";
     foreach my $host (@{$result->{results}}) {
         if ($number_of_lines == MAX_INSERT_BY_QUERY) {
-            $status = $self->{class_object_centreon}->custom_execute(request => $query . $values);
+            ($status) = $self->{class_object_centreon}->custom_execute(request => $query . $values);
             if ($status == -1) {
                 $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to insert job '$job_id' results");
                 $self->update_job_status(
@@ -650,7 +684,7 @@ sub discovery_command_result {
     }
 
     if ($values ne '') {
-        $status = $self->{class_object_centreon}->custom_execute(request => $query . $values);
+        ($status) = $self->{class_object_centreon}->custom_execute(request => $query . $values);
         if ($status == -1) {
             $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - failed to insert job '$job_id' results");
             $self->update_job_status(
@@ -686,7 +720,7 @@ sub discovery_command_result {
                         instant => 1,
                         command => $post_command->{command_line},
                         metadata => {
-                            job_id => $options{data}->{content}->{job_id},
+                            job_id => $job_id,
                             source => 'autodiscovery-host-job-postcommand'
                         }
                     }
@@ -831,6 +865,11 @@ sub action_hostdiscoveryjoblistener {
     if ($options{data}->{code} == GORGONE_MODULE_ACTION_COMMAND_RESULT && 
         $options{data}->{data}->{metadata}->{source} eq 'autodiscovery-host-job-discovery') {
         $self->discovery_command_result(%options);
+        return 1;
+    }
+    if ($options{data}->{code} == GORGONE_MODULE_ACTION_COMMAND_RESULT && 
+        $options{data}->{data}->{metadata}->{source} eq 'autodiscovery-host-job-postcommand') {
+        $self->discovery_postcommand_result(%options);
         return 1;
     }
 

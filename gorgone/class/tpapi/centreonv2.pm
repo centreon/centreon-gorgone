@@ -233,6 +233,7 @@ sub get_monitoring_hosts {
 sub get_scheduling_jobs {
     my ($self, %options) = @_;
 
+=pod
     my $results = [
         {
             execution => {
@@ -260,6 +261,7 @@ sub get_scheduling_jobs {
         }
     ];
     return (0, $results);
+=cut
 
     my $get_param;
     if (defined($options{search})) {

@@ -250,7 +250,7 @@ sub hdisco_sync {
     }
 
     my $jobs = {};
-    foreach my $job (@$results) {
+    foreach my $job (@{$results->{result}}) {
         ($status, $message) = $self->hdisco_addupdate_job(job => $job);
         if ($status) {
              $self->{logger}->writeLogError('[autodiscovery] -class- host discovery - addupdate job - ' . $message);

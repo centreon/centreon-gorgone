@@ -149,7 +149,7 @@ sub authenticate {
     if (!defined($token)) {
         $self->{is_error} = 1;
         $self->{error} = 'authenticate issue - cannot get token';
-        return ;
+        return undef;
     }
 
     $self->{token} = $token;
@@ -159,8 +159,13 @@ sub authenticate {
 sub request {
     my ($self, %options) = @_;
 
-    $self->{is_error} = 0;
+    if (!defined($self->{base_url})) {
+        $self->{is_error} = 1;
+        $self->{error} = 'configuration missing';
+        return 1;
+    }
 
+    $self->{is_error} = 0;
     if ($self->{is_logged} == 0) {
         $self->authenticate();
     }

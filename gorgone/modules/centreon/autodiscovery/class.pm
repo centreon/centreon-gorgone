@@ -1031,10 +1031,13 @@ sub run {
         config => $self->{tpapi}->get_configuration(name => $self->{tpapi_clapi_name})
     );
     $self->{tpapi_centreonv2} = gorgone::class::tpapi::centreonv2->new();
-    $self->{tpapi_centreonv2}->set_configuration(
+    my ($status) = $self->{tpapi_centreonv2}->set_configuration(
         config => $self->{tpapi}->get_configuration(name => $self->{tpapi_centreonv2_name}),
         logger => $self->{logger}
     );
+    if ($status) {
+        $self->{logger}->writeLogError('[autodiscovery] -class- host discovery - configure api centreonv2 - ' . $self->{tpapi_centreonv2}->error());
+    }
 
     $self->{db_centreon} = gorgone::class::db->new(
         dsn => $self->{config_db_centreon}->{dsn},

@@ -283,7 +283,7 @@ sub get_host_job {
     }
 
     my $job;
-    foreach my $entry (@$results) {
+    foreach my $entry (@{$results->{result}}) {
         if ($entry->{job_id} == $options{job_id}) {
             $job = $entry;
             last;

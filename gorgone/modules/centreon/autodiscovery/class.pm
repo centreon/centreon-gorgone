@@ -125,6 +125,17 @@ For cron job, we use discovery token as cron ID.
 
 =cut
 
+sub hdisco_is_running_job {
+    my ($self, %options) = @_;
+
+    if ($self->{hdisco_jobs_ids}->{ $options{job}->{job_id} }->{status} == JOB_RUNNING ||
+        $self->{hdisco_jobs_ids}->{ $options{job}->{job_id} }->{status} == SAVE_RUNNING) {
+        return 1;
+    }
+
+    return 0;
+}
+
 sub hdisco_add_cron {
     my ($self, %options) = @_;
 
@@ -177,7 +188,7 @@ sub hdisco_addupdate_job {
     } else {
         $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - new job '" . $options{job}->{job_id} . "'");
         # it's running so we have a token
-        if ($options{job}->{status} == JOB_RUNNING) {
+        if ($self->hdisco_is_running_job(job_id => $options{job}->{job_id})) {
             $extra_infos->{listener_added} = 1;
             $self->hdisco_add_joblistener(
                 jobs => [
@@ -411,7 +422,7 @@ sub launchhostdiscovery {
     if (!defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
         return (1, 'trying to launch discovery for inexistant job');
     }
-    if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status} == JOB_RUNNING) {
+    if ($self->hdisco_is_running_job(job_id => $options{data}->{content}->{job_id})) {
         return (1, 'job is already running');
     }
     if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{execution}->{mode} == EXECUTION_MODE_PAUSE) {
@@ -425,6 +436,7 @@ sub launchhostdiscovery {
         values => {
             status => JOB_RUNNING,
             message => 'Running',
+            last_execution => time(),
             duration => 0,
             discovered_items => 0
         },
@@ -572,7 +584,7 @@ sub discovery_postcommand_result {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - execute discovery postcommand failed job '$job_id'");
         $self->update_job_status(
             job_id => $job_id,
-            status => JOB_FAILED,
+            status => SAVE_FAILED,
             message => $output
         );
         return 1;
@@ -581,7 +593,7 @@ sub discovery_postcommand_result {
     $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - finished discovery postcommand job '$job_id'");
     $self->update_job_status(
         job_id => $job_id,
-        status => JOB_FINISH,
+        status => SAVE_FINISH,
         message => 'Finished'
     );
 }
@@ -605,6 +617,7 @@ sub discovery_command_result {
 
     if ($exit_code != 0) {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - execute discovery plugin failed job '$job_id'");
+        my $job_status = ($self->{hdisco_jobs_ids}->{$job_id}->{status} == SAVE_RUNNING) ? SAVE_FAILED : JOB_FAILED;
         $self->update_job_status(
             job_id => $job_id,
             status => JOB_FAILED,
@@ -700,6 +713,13 @@ sub discovery_command_result {
         scalar(@{$self->{hdisco_jobs_ids}->{$job_id}->{post_execution}->{commands}}) > 0) {
         $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - execute post command job '$job_id'");
         my $post_command = $self->{hdisco_jobs_ids}->{$job_id}->{post_execution}->{commands}->[0];
+
+        $self->update_job_status(
+            job_id => $job_id,
+            status => SAVE_RUNNING,
+            message => 'Save Running'
+        );
+
         $self->send_internal_action(
             action => 'ADDLISTENER',
             data => [

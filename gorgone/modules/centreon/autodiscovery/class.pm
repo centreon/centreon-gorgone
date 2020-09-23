@@ -831,9 +831,7 @@ sub update_job_status {
     $self->update_job_information(
         values => {
             status => $options{status},
-            message => $options{message},
-            duration => 0,
-            discovered_items => 0
+            message => $options{message}
         },
         where_clause => [
             {

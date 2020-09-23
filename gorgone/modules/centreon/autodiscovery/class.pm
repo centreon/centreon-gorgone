@@ -617,7 +617,6 @@ sub discovery_command_result {
 
     if ($exit_code != 0) {
         $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - execute discovery plugin failed job '$job_id'");
-        my $job_status = ($self->{hdisco_jobs_ids}->{$job_id}->{status} == SAVE_RUNNING) ? SAVE_FAILED : JOB_FAILED;
         $self->update_job_status(
             job_id => $job_id,
             status => JOB_FAILED,
@@ -714,25 +713,6 @@ sub discovery_command_result {
         $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - execute post command job '$job_id'");
         my $post_command = $self->{hdisco_jobs_ids}->{$job_id}->{post_execution}->{commands}->[0];
 
-        $self->update_job_status(
-            job_id => $job_id,
-            status => SAVE_RUNNING,
-            message => 'Save Running',
-            duration => $result->{duration},
-            discovered_items => $result->{discovered_items}
-        );
-
-        $self->send_internal_action(
-            action => 'ADDLISTENER',
-            data => [
-                {
-                    identity => 'gorgoneautodiscovery',
-                    event => 'HOSTDISCOVERYJOBLISTENER',
-                    token => $self->{hdisco_jobs_ids}->{$job_id}->{token}
-                }
-            ]
-        );
-
         $self->send_internal_action(
             action => $post_command->{action},
             token => $self->{hdisco_jobs_ids}->{$job_id}->{token},
@@ -749,16 +729,16 @@ sub discovery_command_result {
                 ]
             }
         );
-    } else {
-        $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - finished discovery command job '$job_id'");
-        $self->update_job_status(
-            job_id => $job_id,
-            status => JOB_FINISH,
-            message => 'Finished',
-            duration => $result->{duration},
-            discovered_items => $result->{discovered_items}
-        );
     }
+    
+    $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - finished discovery command job '$job_id'");
+    $self->update_job_status(
+        job_id => $job_id,
+        status => JOB_FINISH,
+        message => 'Finished',
+        duration => $result->{duration},
+        discovered_items => $result->{discovered_items}
+    );
 
     return 0;
 }
@@ -887,11 +867,11 @@ sub action_hostdiscoveryjoblistener {
         $self->discovery_command_result(%options);
         return 1;
     }
-    if ($options{data}->{code} == GORGONE_MODULE_ACTION_COMMAND_RESULT && 
-        $options{data}->{data}->{metadata}->{source} eq 'autodiscovery-host-job-postcommand') {
-        $self->discovery_postcommand_result(%options);
-        return 1;
-    }
+    #if ($options{data}->{code} == GORGONE_MODULE_ACTION_COMMAND_RESULT && 
+    #    $options{data}->{data}->{metadata}->{source} eq 'autodiscovery-host-job-postcommand') {
+    #    $self->discovery_postcommand_result(%options);
+    #    return 1;
+    #}
 
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
         $self->{hdisco_jobs_ids}->{$job_id}->{status} = JOB_FAILED;

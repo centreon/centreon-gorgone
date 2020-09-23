@@ -717,7 +717,9 @@ sub discovery_command_result {
         $self->update_job_status(
             job_id => $job_id,
             status => SAVE_RUNNING,
-            message => 'Save Running'
+            message => 'Save Running',
+            duration => $result->{duration},
+            discovered_items => $result->{discovered_items}
         );
 
         $self->send_internal_action(
@@ -752,7 +754,9 @@ sub discovery_command_result {
         $self->update_job_status(
             job_id => $job_id,
             status => JOB_FINISH,
-            message => 'Finished'
+            message => 'Finished',
+            duration => $result->{duration},
+            discovered_items => $result->{discovered_items}
         );
     }
 
@@ -828,11 +832,11 @@ sub action_deletehostdiscoveryjob {
 sub update_job_status {
     my ($self, %options) = @_;
 
+    my $values = { status => $options{status}, message => $options{message} };
+    $values->{duration} = $options{duration} if (defined($options{duration}));
+    $values->{discovered_items} = $options{discovered_items} if (defined($options{discovered_items}));
     $self->update_job_information(
-        values => {
-            status => $options{status},
-            message => $options{message}
-        },
+        values => $values,
         where_clause => [
             {
                 id => $options{job_id}

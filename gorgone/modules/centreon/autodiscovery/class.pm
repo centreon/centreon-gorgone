@@ -436,7 +436,7 @@ sub launchhostdiscovery {
         values => {
             status => JOB_RUNNING,
             message => 'Running',
-            last_execution => time(),
+            last_execution => strftime("%F %H:%M:%S", localtime),
             duration => 0,
             discovered_items => 0
         },

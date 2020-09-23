@@ -380,7 +380,7 @@ sub action_addhostdiscoveryjob {
     }
 
     # Launch a immediate job.
-    if ($options{job}->{content}->{execution}->{mode} == 0) {
+    if ($options{job}->{content}->{execution}->{mode} == EXECUTION_MODE_IMMEDIATE) {
         my $timeout = (defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/) ?
             $options{data}->{content}->{timeout} : $self->{global_timeout};
         ($status, $message) = $self->action_launchhostdiscovery(

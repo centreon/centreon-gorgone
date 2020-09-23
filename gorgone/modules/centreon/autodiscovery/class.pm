@@ -128,8 +128,8 @@ For cron job, we use discovery token as cron ID.
 sub hdisco_is_running_job {
     my ($self, %options) = @_;
 
-    if ($self->{hdisco_jobs_ids}->{ $options{job}->{job_id} }->{status} == JOB_RUNNING ||
-        $self->{hdisco_jobs_ids}->{ $options{job}->{job_id} }->{status} == SAVE_RUNNING) {
+    if ($options{status} == JOB_RUNNING ||
+        $options{status} == SAVE_RUNNING) {
         return 1;
     }
 
@@ -188,7 +188,7 @@ sub hdisco_addupdate_job {
     } else {
         $self->{logger}->writeLogDebug("[autodiscovery] -class- host discovery - new job '" . $options{job}->{job_id} . "'");
         # it's running so we have a token
-        if ($self->hdisco_is_running_job(job_id => $options{job}->{job_id})) {
+        if ($self->hdisco_is_running_job(status => $options{job}->{status})) {
             $extra_infos->{listener_added} = 1;
             $self->hdisco_add_joblistener(
                 jobs => [
@@ -380,7 +380,7 @@ sub action_addhostdiscoveryjob {
     }
 
     # Launch a immediate job.
-    if ($options{job}->{content}->{execution}->{mode} == EXECUTION_MODE_IMMEDIATE) {
+    if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{execution}->{mode} == EXECUTION_MODE_IMMEDIATE) {
         my $timeout = (defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/) ?
             $options{data}->{content}->{timeout} : $self->{global_timeout};
         ($status, $message) = $self->action_launchhostdiscovery(
@@ -422,7 +422,7 @@ sub launchhostdiscovery {
     if (!defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
         return (1, 'trying to launch discovery for inexistant job');
     }
-    if ($self->hdisco_is_running_job(job_id => $options{data}->{content}->{job_id})) {
+    if ($self->hdisco_is_running_job(status => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status})) {
         return (1, 'job is already running');
     }
     if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{execution}->{mode} == EXECUTION_MODE_PAUSE) {
@@ -815,9 +815,7 @@ sub action_deletehostdiscoveryjob {
         }
         delete $self->{hdisco_jobs_ids}->{$job_id};
     } else {
-        my $extra_infos = $self->{hdisco_jobs_ids}->{$job_id}->{extra_infos};
-        $self->{hdisco_jobs_ids}->{$job_id} = $job;
-        $self->{hdisco_jobs_ids}->{$job_id}->{extra_infos} = $extra_infos;
+        $self->hdisco_addupdate_job(job => $job);
     }
 
     $self->send_log(
@@ -867,7 +865,7 @@ sub update_job_information {
         $append = 'AND ';
     }
 
-    my $status = $self->{class_object_centreon}->custom_execute(request => $query);
+    my ($status) = $self->{class_object_centreon}->custom_execute(request => $query);
     if ($status == -1) {
         $self->{logger}->writeLogError('[autodiscovery] Failed to update job information');
         return -1;

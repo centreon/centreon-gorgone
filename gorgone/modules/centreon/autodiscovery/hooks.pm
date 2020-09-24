@@ -36,8 +36,8 @@ use constant EVENTS => [
     { event => 'SERVICEDISCOVERYLISTENER' },
     { event => 'ADDHOSTDISCOVERYJOB', uri => '/hosts', method => 'POST' },
     { event => 'DELETEHOSTDISCOVERYJOB', uri => '/hosts', method => 'DELETE' },
-    { event => 'LAUNCHHOSTDISCOVERY' },
-    { event => 'LAUNCHSERVICEDISCOVERY', uri => '/services', method => 'POST' },
+    { event => 'LAUNCHHOSTDISCOVERY', uri => '/hosts', method => 'GET' },
+    { event => 'LAUNCHSERVICEDISCOVERY', uri => '/services', method => 'POST' }
 ];
 
 my $config_core;

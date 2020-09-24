@@ -419,7 +419,15 @@ sub launchhostdiscovery {
     
     return (1, 'host discovery sync not done') if (!$self->is_hdisco_synced());
 
-    if (!defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
+    my $job_id;
+    if (defined($options{data}->{variables}->[0]) &&
+        defined($options{data}->{variables}->[1]) && $options{data}->{variables}->[1] eq 'schedule') {
+        $job_id = $options{data}->{variables}->[0];
+    } elsif (defined($options{data}->{content}->{job_id})) {
+        $job_id = $options{data}->{content}->{job_id};
+    }
+
+    if (!defined($job_id) || !defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
         return (1, 'trying to launch discovery for inexistant job');
     }
     if ($self->hdisco_is_running_job(status => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status})) {

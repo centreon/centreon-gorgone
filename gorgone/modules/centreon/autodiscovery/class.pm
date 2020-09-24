@@ -419,25 +419,19 @@ sub launchhostdiscovery {
     
     return (1, 'host discovery sync not done') if (!$self->is_hdisco_synced());
 
-    my $job_id;
-    if (defined($options{data}->{variables}->[0]) &&
-        defined($options{data}->{variables}->[1]) && $options{data}->{variables}->[1] eq 'schedule') {
-        $job_id = $options{data}->{variables}->[0];
-    } elsif (defined($options{data}->{content}->{job_id})) {
-        $job_id = $options{data}->{content}->{job_id};
-    }
+    my $job_id = $options{job_id};
 
-    if (!defined($job_id) || !defined($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} })) {
+    if (!defined($job_id) || !defined($self->{hdisco_jobs_ids}->{$job_id})) {
         return (1, 'trying to launch discovery for inexistant job');
     }
-    if ($self->hdisco_is_running_job(status => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status})) {
+    if ($self->hdisco_is_running_job(status => $self->{hdisco_jobs_ids}->{$job_id}->{status})) {
         return (1, 'job is already running');
     }
-    if ($self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{execution}->{mode} == EXECUTION_MODE_PAUSE) {
+    if ($self->{hdisco_jobs_ids}->{$job_id}->{execution}->{mode} == EXECUTION_MODE_PAUSE) {
         return (1, 'job is paused');
     }
 
-    $self->{logger}->writeLogInfo("[autodiscovery] -class- host discovery - launching discovery for job '" . $options{data}->{content}->{job_id} . "'");
+    $self->{logger}->writeLogInfo("[autodiscovery] -class- host discovery - launching discovery for job '" . $job_id . "'");
 
     # Running
     if ($self->update_job_information(
@@ -450,13 +444,13 @@ sub launchhostdiscovery {
         },
         where_clause => [
             {
-                id => $options{data}->{content}->{job_id}
+                id => $job_id
             }
         ]
     ) == -1) {
         return (1, 'cannot update job status');
     }
-    $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{status} = JOB_RUNNING;
+    $self->{hdisco_jobs_ids}->{$job_id}->{status} = JOB_RUNNING;
 
     $self->send_internal_action(
         action => 'ADDLISTENER',
@@ -464,8 +458,8 @@ sub launchhostdiscovery {
             {
                 identity => 'gorgoneautodiscovery',
                 event => 'HOSTDISCOVERYJOBLISTENER',
-                target => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{target},
-                token => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{token},
+                target => $self->{hdisco_jobs_ids}->{$job_id}->{target},
+                token => $self->{hdisco_jobs_ids}->{$job_id}->{token},
                 timeout => defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/ ? 
                     $1 + $self->{check_interval} + 15 : undef,
                 log_pace => $self->{check_interval}
@@ -475,16 +469,16 @@ sub launchhostdiscovery {
 
     $self->send_internal_action(
         action => 'COMMAND',
-        target => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{target},
-        token => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{token},
+        target => $self->{hdisco_jobs_ids}->{$job_id}->{target},
+        token => $self->{hdisco_jobs_ids}->{$job_id}->{token},
         data => {
             content => [
                 {
                     instant => 1,
-                    command => $self->{hdisco_jobs_ids}->{ $options{data}->{content}->{job_id} }->{command_line},
-                    timeout => $options{data}->{content}->{timeout},
+                    command => $self->{hdisco_jobs_ids}->{$job_id}->{command_line},
+                    timeout => defined($options{data}->{content}->{timeout}) && $options{data}->{content}->{timeout} =~ /(\d+)/ ? $1 : undef,
                     metadata => {
-                        job_id => $options{data}->{content}->{job_id},
+                        job_id => $job_id,
                         source => 'autodiscovery-host-job-discovery'
                     }
                 }
@@ -510,27 +504,35 @@ sub action_launchhostdiscovery {
         return ;
     }
 
+    my $job_id;
+    if (defined($options{data}->{variables}->[0]) &&
+        defined($options{data}->{variables}->[1]) && $options{data}->{variables}->[1] eq 'schedule') {
+        $job_id = $options{data}->{variables}->[0];
+    } elsif (defined($options{data}->{content}->{job_id})) {
+        $job_id = $options{data}->{content}->{job_id};
+    }
+
     my ($status, $message, $job);
-    ($status, $message, $job) = $self->get_host_job(job_id => $options{data}->{content}->{job_id});
+    ($status, $message, $job) = $self->get_host_job(job_id => $job_id);
     if ($status != 0) {
-        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - cannot get host discovery job '$options{data}->{content}->{job_id}' - " . $self->{tpapi_centreonv2}->error());
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - cannot get host discovery job '$job_id' - " . $self->{tpapi_centreonv2}->error());
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
             data => {
-                message => "cannot get job '$options{data}->{content}->{job_id}'"
+                message => "cannot get job '$job_id'"
             }
         );
         return 1;
     }
 
     if (!defined($job)) {
-        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - cannot get host discovery job '$options{data}->{content}->{job_id}' - " . $self->{tpapi_centreonv2}->error());
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - cannot get host discovery job '$job_id' - " . $self->{tpapi_centreonv2}->error());
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
             data => {
-                message => "cannot get job '$options{data}->{content}->{job_id}'"
+                message => "cannot get job '$job_id'"
             }
         );
         return 1;
@@ -538,20 +540,20 @@ sub action_launchhostdiscovery {
 
     ($status, $message) = $self->hdisco_addupdate_job(job => $job);
     if ($status) {
-        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - add job '$options{data}->{content}->{job_id}' - $message");
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - add job '$job_id' - $message");
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
             data => {
-                message => "add job '$options{data}->{content}->{job_id}' - $message"
+                message => "add job '$job_id' - $message"
             }
         );
         return 1;
     }
 
-    ($status, $message) = $self->launchhostdiscovery(%options);
+    ($status, $message) = $self->launchhostdiscovery(job_id => $job_id, %options);
     if ($status) {
-        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - launch discovery job '$options{data}->{content}->{job_id}' - $message");
+        $self->{logger}->writeLogError("[autodiscovery] -class- host discovery - launch discovery job '$job_id' - $message");
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
@@ -568,7 +570,7 @@ sub action_launchhostdiscovery {
         token => $options{token},
         instant => 1,
         data => {
-            message => "job '$options{data}->{content}->{job_id}' launched"
+            message => "job '$job_id' launched"
         }
     );
 }

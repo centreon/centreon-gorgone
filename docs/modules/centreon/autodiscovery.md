@@ -90,6 +90,14 @@ With the following keys for the `post_execution` entry:
 
 #### Examples
 
+#### Execute immediately host discovery job (even if execution mode is CRON(1)) 
+
+```bash
+curl --request GET "https://hostname:8443/api/centreon/autodiscovery/hosts/:jobid/schedule" \
+  --header "Accept: application/json" \
+  --header "Content-Type: application/json"
+```
+
 #### Execute immediately without post-execution commands
 
 ```bash

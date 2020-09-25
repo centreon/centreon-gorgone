@@ -444,6 +444,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /centreon/autodiscovery/hosts/{job_id}/schedule:
+    get:
+      tags:
+        - Autodiscovery
+      summary: "Launch a host discovery job"
+      description: "Launch a host discovery job identified by id (even if in cron mode)."
+      parameters:
+        - $ref: '#/components/parameters/HostDiscoveryId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Token'
+                  - $ref: '#/components/schemas/Logs'
+                  - $ref: '#/components/schemas/NoLogs'
+                  - $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /centreon/autodiscovery/hosts/{token}:
     delete:
       tags:
@@ -530,6 +553,14 @@ components:
       name: monitoring_server_id
       required: true
       description: "ID of the monitoring server"
+      schema:
+        type: integer
+        example: 2
+    HostDiscoveryId:
+      in: path
+      name: job_id
+      required: true
+      description: "ID of the job"
       schema:
         type: integer
         example: 2

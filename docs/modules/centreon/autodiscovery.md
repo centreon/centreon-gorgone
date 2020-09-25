@@ -90,14 +90,6 @@ With the following keys for the `post_execution` entry:
 
 #### Examples
 
-#### Execute immediately host discovery job (even if execution mode is CRON(1)) 
-
-```bash
-curl --request GET "https://hostname:8443/api/centreon/autodiscovery/hosts/:jobid/schedule" \
-  --header "Accept: application/json" \
-  --header "Content-Type: application/json"
-```
-
 #### Execute immediately without post-execution commands
 
 ```bash
@@ -190,6 +182,31 @@ curl --request POST "https://hostname:8443/api/centreon/autodiscovery/hosts" \
         ]
     }
 }"
+```
+
+### Launch a host discovery job
+
+| Endpoint                                   | Method |
+|:-------------------------------------------|:-------|
+| /centreon/autodiscovery/hosts/:id/schedule | `GET`  |
+
+#### Headers
+
+| Header       | Value            |
+|:-------------|:-----------------|
+| Accept       | application/json |
+
+#### Path variables
+
+| Variable | Description           |
+|:---------|:----------------------|
+| id       | Identifier of the job |
+
+#### Example
+
+```bash
+curl --request GET "https://hostname:8443/api/centreon/autodiscovery/hosts/:id/schedule" \
+  --header "Accept: application/json"
 ```
 
 ### Delete a host discovery job

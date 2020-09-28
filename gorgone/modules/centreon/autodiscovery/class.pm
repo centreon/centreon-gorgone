@@ -1093,6 +1093,15 @@ sub run {
         }
     ];
 
+    if (defined($self->{config}->{cron})) {
+        $self->send_internal_action(
+            action => 'ADDCRON',
+            data => {
+                content => $self->{config}->{cron},
+            }
+        );
+    }
+
     while (1) {
         $self->hdisco_sync();
 

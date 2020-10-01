@@ -106,7 +106,7 @@ sub cache_refresh {
         keys => 'nagios_server_id'
     );
     if ($status == -1 || !defined($datas)) {
-        $self->{logger}->writeLogError('[legacycmd] -class- cannot get configuration for pollers');
+        $self->{logger}->writeLogError('[legacycmd] Cannot get configuration for pollers');
         return ;
     }
 

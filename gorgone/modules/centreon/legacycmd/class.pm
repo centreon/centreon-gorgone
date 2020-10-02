@@ -456,7 +456,7 @@ sub action_addimporttaskwithparent {
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
             data => {
-                message => "expected parent_id task ID, found '" . ref($options{data}->{content}->{parent_id}) . "'",
+                message => "expected parent_id task ID, found '" . $options{data}->{content}->{parent_id} . "'",
             }
         );
         return -1;
@@ -465,7 +465,7 @@ sub action_addimporttaskwithparent {
     my ($status, $datas) = $self->{class_object_centreon}->custom_execute(
         request => "INSERT INTO task (`type`, `status`, `parent_id`) VALUES ('import', 'pending', '" . $options{data}->{content}->{parent_id} . "')"
     );
-    if ($status == -1 || !defined($datas)) {
+    if ($status == -1) {
         $self->send_log(
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
@@ -482,7 +482,6 @@ sub action_addimporttaskwithparent {
         $self->{clapi_password} . ' -w -o CentreonWorker -a processQueue';
     $self->send_internal_action(
         action => 'COMMAND',
-        target => undef,
         token => $options{token},
         data => {
             content => [

@@ -98,7 +98,7 @@ sub get_pollers_config {
             'engine_start_command, engine_stop_command, engine_restart_command, engine_reload_command, ' .
             'broker_reload_command, init_script_centreontrapd ' .
             'FROM cfg_nagios, nagios_server ' .
-            "WHERE nagios_server.id = cfg_nagios.nagios_server_id AND cfg_nagios.nagios_activate = '1'"
+            "WHERE nagios_server.id = cfg_nagios.nagios_server_id AND cfg_nagios.nagios_activate = '1'",
         mode => 1,
         keys => 'nagios_server_id'
     );

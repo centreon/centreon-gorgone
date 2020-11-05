@@ -140,22 +140,27 @@ sub send_email {
             if (scalar(@$body) > 0) {
                 $self->{logger}->writeLogInfo("[autodiscovery] -servicediscovery- $self->{uuid} send email to '" . $contact_id .  "' (" . $self->{discovery}->{rules}->{$rule_id}->{contact}->{$contact_id}->{contact_email} . ")");
 
-                my $smtp = Net::SMTP->new('localhost');
-                $smtp->mail($self->{mail_from});
-                if ($smtp->to($self->{discovery}->{rules}->{$rule_id}->{contact}->{$contact_id}->{contact_email})) {
-                    $smtp->data();
-                    $smtp->datasend(
-                        'Date: ' . strftime('%a, %d %b %Y %H:%M:%S %z', localtime(time())) . "\n" .
-                        'From: ' . $self->{mail_from} . "\n" .
-                        'To: ' . $self->{discovery}->{rules}->{$rule_id}->{contact}->{$contact_id}->{contact_email} . "\n" .
-                        'Subject: ' . $self->{mail_subject} . "\n" .
-                        "\n" .
-                        join("\n", @$body) . "\n"
-                    );
-                    $smtp->dataend();
-                } else {
-                    $self->{logger}->writeLogInfo("[autodiscovery] -servicediscovery- sent email error - " . $smtp->message());
+                my $smtp = Net::SMTP->new('localhost', Timeout => 15);
+                if (!defined($smtp)) {
+                    $self->{logger}->writeLogError("[autodiscovery] -servicediscovery- sent email error - " . $@);
+                    next;
                 }
+                $smtp->mail($self->{mail_from});
+                if (!$smtp->to($self->{discovery}->{rules}->{$rule_id}->{contact}->{$contact_id}->{contact_email})) {
+                    $self->{logger}->writeLogError("[autodiscovery] -servicediscovery- sent email error - " . $smtp->message());
+                    next;
+                }
+
+                $smtp->data();
+                $smtp->datasend(
+                    'Date: ' . strftime('%a, %d %b %Y %H:%M:%S %z', localtime(time())) . "\n" .
+                    'From: ' . $self->{mail_from} . "\n" .
+                    'To: ' . $self->{discovery}->{rules}->{$rule_id}->{contact}->{$contact_id}->{contact_email} . "\n" .
+                    'Subject: ' . $self->{mail_subject} . "\n" .
+                    "\n" .
+                    join("\n", @$body) . "\n"
+                );
+                $smtp->dataend();
                 $smtp->quit();
             }
         }

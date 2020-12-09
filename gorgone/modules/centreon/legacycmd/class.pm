@@ -485,9 +485,9 @@ sub execute_cmd {
 sub move_cmd_file {
     my ($self, %options) = @_;
 
-    my $operator = '+<';
+    my $operator = '+<:encoding(UTF-8)';
     if ($self->{config}->{dirty_mode} == 1) {
-        $operator = '<';
+        $operator = '<:encoding(UTF-8)';
     }
     my $handle;
     if (-e $options{dst}) {

@@ -65,7 +65,6 @@ sub new {
         'GET_/internal/information' => 'INFORMATION',
         'POST_/internal/logger' => 'BCASTLOGGER',
     };
-    $self->{config} = 
 
     return $self;
 }
@@ -540,7 +539,12 @@ sub message_run {
 
 sub router_internal_event {
     while (1) {
-        my ($identity, $message) = gorgone::standard::library::zmq_read_message(socket => $gorgone->{internal_socket});
+        my ($identity, $message) = gorgone::standard::library::zmq_read_message(
+            socket => $gorgone->{internal_socket},
+            logger => $gorgone->{logger}
+        );
+        last if (!defined($identity));
+
         my ($token, $code, $response, $response_type) = $gorgone->message_run(
             message => $message,
             identity => $identity,
@@ -561,7 +565,11 @@ sub router_internal_event {
 sub handshake {
     my ($self, %options) = @_;
 
-    my ($identity, $message) = gorgone::standard::library::zmq_read_message(socket => $self->{external_socket});
+    my ($identity, $message) = gorgone::standard::library::zmq_read_message(
+        socket => $self->{external_socket},
+        logger => $self->{logger}
+    );
+    return undef if (!defined($identity));
 
     # Test if it asks for the pubkey
     if ($message =~ /^\s*\[GETPUBKEY\]/) {

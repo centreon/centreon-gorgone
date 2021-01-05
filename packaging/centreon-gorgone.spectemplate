@@ -1,5 +1,5 @@
 Name:       centreon-gorgone
-Version:    20.04.8
+Version:    20.04.9
 Release:    @RELEASE@%{?dist}
 Summary:    Perl daemon task handlers
 Group:      Applications/System

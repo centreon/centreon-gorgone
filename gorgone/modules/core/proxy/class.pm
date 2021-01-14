@@ -447,7 +447,10 @@ sub proxy {
 sub event_internal {
     my (%options) = @_;
 
-    return if (defined($connector->{clients}->{ $options{channel} }) && $connector->{clients}->{ $options{channel} }->{com_read_internal} == 0);
+    return if (
+            defined($connector->{clients}->{ $options{channel} }) && 
+            ($connector->{clients}->{ $options{channel} }->{com_read_internal} == 0 || $connector->{clients}->{ $options{channel} }->{delete} == 1)
+        );
 
     my $socket = $options{channel} eq 'control' ? $connector->{internal_socket} : $connector->{internal_channels}->{ $options{channel} };
     while (1) {

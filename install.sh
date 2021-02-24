@@ -33,9 +33,9 @@
 usage() {
     local program=$0
     echo -e "Usage: $program"
-    echo -e "  -i\tinstall Centreon with interactive interface"
-    echo -e "  -s\tinstall Centreon silently"
-    echo -e "  -u\tupgrade Centreon specifying the directory of instGorgone.conf file"
+    echo -e "  -i\tinstall Gorgone with interactive interface"
+    echo -e "  -u\tupgrade Gorgone specifying the directory of instGorgone.conf file"
+    echo -e "  -s\tinstall/upgrade Gorgone silently"
     echo -e "  -e\textra variables, 'VAR=value' format (overrides input files)"
     exit 1
 }
@@ -76,7 +76,7 @@ do
         s ) silent_install="1"
             _tmp_install_opts="1"
             ;;
-        u ) silent_install="1"
+        u ) silent_install="0"
             UPGRADE_FILE="${OPTARG%/}"
             upgrade="1" 
             _tmp_install_opts="1"
@@ -167,7 +167,7 @@ fi
 
 ## Load previous installation input variables if upgrade
 if [ "$upgrade" -eq 1 ] ; then
-    test_file "$UPGRADE_FILE" "Centreon upgrade file"
+    test_file "$UPGRADE_FILE" "Gorgone upgrade file"
     if [ "$?" -eq 0 ] ; then
         echo_info "Loading previous installation input variables" "$UPGRADE_FILE"
         source $UPGRADE_FILE

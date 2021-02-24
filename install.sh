@@ -266,7 +266,9 @@ if [[ "${INSTALLATION_TYPE}" =~ ^central|poller$ ]] ; then
     test_var_and_show "CENTREON_HOME" "Centreon home directory"
     test_var_and_show "CENTREON_ETC_DIR" "Centreon configuration directory"
     test_var_and_show "CENTREON_SERVICE" "Centreon service"
+    test_var_and_show "ENGINE_USER" "Engine user"
     test_var_and_show "ENGINE_GROUP" "Engine group"
+    test_var_and_show "BROKER_USER" "Broker user"
     test_var_and_show "BROKER_GROUP" "Broker group"
 fi
 
@@ -444,6 +446,8 @@ echo_title "Update groups memberships"
 if [[ "${INSTALLATION_TYPE}" =~ ^central|poller$ ]] ; then
     add_user_to_group "$GORGONE_USER" "$BROKER_GROUP"
     add_user_to_group "$GORGONE_USER" "$ENGINE_GROUP"
+    add_user_to_group "$ENGINE_USER" "$GORGONE_GROUP"
+    add_user_to_group "$BROKER_USER" "$GORGONE_GROUP"
 fi
 
 if [ ! -z "$ERROR_MESSAGE" ] ; then

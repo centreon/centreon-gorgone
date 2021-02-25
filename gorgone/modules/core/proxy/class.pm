@@ -418,12 +418,12 @@ sub proxy {
 sub event_internal {
     while (1) {
         my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+        last if (!defined($message));
 
         proxy(message => $message);
         if ($connector->{stop} == 1 && (time() - $connector->{exit_timeout}) > $connector->{stop_time}) {
             $connector->exit_process();
         }
-        last unless (gorgone::standard::library::zmq_still_read(socket => $connector->{internal_socket}));
     }
 }
 

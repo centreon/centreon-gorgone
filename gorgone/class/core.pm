@@ -561,7 +561,6 @@ sub router_internal_event {
             code => $code,
             token => $token
         );
-        last unless (gorgone::standard::library::zmq_still_read(socket => $gorgone->{internal_socket}));
     }
 }
 
@@ -710,7 +709,6 @@ sub router_external_event {
                 data => $response
             );
         }
-        last unless (gorgone::standard::library::zmq_still_read(socket => $gorgone->{external_socket}));
     }
 }
 

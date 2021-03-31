@@ -1,3 +1,5 @@
+%define selinuxdevel %{_datadir}/selinux/devel
+
 Name:       centreon-gorgone
 Version:    21.04.0
 Release:    @RELEASE@%{?dist}
@@ -37,6 +39,8 @@ Requires:   perl(Hash::Merge)
 Requires:   perl(Clone)
 Requires:   perl(Sys::Syslog)
 AutoReqProv: no
+BuildRequires:  selinux-policy-devel
+BuildRequires:  policycoreutils
 
 %description
 
@@ -52,6 +56,8 @@ Requires:   centreon-gorgone
 %setup -q -n %{name}-%{version}
 
 %build
+# Build selinux configurations
+(cd selinux && %{__make} -f %{selinuxdevel}/Makefile)
 
 %install
 rm -rf %{buildroot}
@@ -80,6 +86,10 @@ mkdir -p %{buildroot}/%{perl_vendorlib}/gorgone
 %{__cp} packaging/centreon.yaml %{buildroot}%{_sysconfdir}/centreon-gorgone/config.d/30-centreon.yaml
 %{__cp} packaging/centreon-api.yaml %{buildroot}%{_sysconfdir}/centreon-gorgone/config.d/31-centreon-api.yaml
 
+# Install selinux configuration files
+%{__mkdir} -p %buildroot%{_datadir}/selinux/packages/centreon
+%{__install} -m 655 selinux/centreon-gorgoned.pp %buildroot%{_datadir}/selinux/packages/centreon/centreon-gorgoned.pp
+
 %{_fixperms} $RPM_BUILD_ROOT/*
 
 %check
@@ -105,6 +115,10 @@ rm -rf %{buildroot}
 %{_localstatedir}/log/centreon-gorgone
 %{_localstatedir}/cache/centreon-gorgone
 
+# selinux
+%defattr(-, root, root, 0655)
+%{_datadir}/selinux/packages/centreon/centreon-gorgoned.pp
+
 %pre
 %{_bindir}/getent group centreon-gorgone &>/dev/null || %{_sbindir}/groupadd -r centreon-gorgone
 %{_bindir}/getent passwd centreon-gorgone &>/dev/null || %{_sbindir}/useradd -g centreon-gorgone -m -d %{_localstatedir}/lib/centreon-gorgone -r centreon-gorgone 2> /dev/null
@@ -129,9 +143,13 @@ fi
 
 %post
 %systemd_post gorgoned.service || :
+semodule -i %{_datadir}/selinux/packages/centreon/centreon-gorgoned.pp 2>/dev/null || :
 
 %preun
 %systemd_preun gorgoned.service || :
+if [ "$1" -lt "1" ]; then # Final removal
+    semodule -r centreon-gorgoned 2>/dev/null || :
+fi
 
 %postun
 %systemd_postun_with_restart gorgoned.service || :

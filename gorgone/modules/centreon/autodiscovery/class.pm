@@ -193,16 +193,16 @@ sub action_launchdiscovery {
         target => $options{data}->{content}->{target},
         token => $options{data}->{content}->{token},
         data => {
+            instant => 1,
             content => [
                 {
-                    instant => 1,
                     command => $options{data}->{content}->{command},
                     timeout => $options{data}->{content}->{timeout},
                     metadata => {
                         job_id => $options{data}->{content}->{job_id},
                         uuid_attributes => $options{data}->{content}->{uuid_attributes},
                         source => 'autodiscovery'
-                    },
+                    }
                 }
             ]
         }

@@ -98,6 +98,7 @@ sub action_command {
             socket => $options{socket_log},
             code => $self->ACTION_FINISH_KO,
             token => $options{token},
+            logging => $options{data}->{logging},
             data => {
                 message => "expected array, found '" . ref($options{data}->{content}) . "'",
             }
@@ -112,6 +113,7 @@ sub action_command {
                 socket => $options{socket_log},
                 code => $self->ACTION_FINISH_KO,
                 token => $options{token},
+                logging => $options{data}->{logging},
                 data => {
                     message => "need command argument at array index '" . $index . "'",
                 }
@@ -125,6 +127,7 @@ sub action_command {
         socket => $options{socket_log},
         code => $self->ACTION_BEGIN,
         token => $options{token},
+        logging => $options{data}->{logging},
         data => {
             message => "commands processing has started",
             request_content => $options{data}->{content}
@@ -138,6 +141,7 @@ sub action_command {
             socket => $options{socket_log},
             code => $self->ACTION_BEGIN,
             token => $options{token},
+            logging => $options{data}->{logging},
             data => {
                 message => "command has started",
                 command => $command->{command},
@@ -159,6 +163,7 @@ sub action_command {
                 socket => $options{socket_log},
                 code => $self->ACTION_FINISH_KO,
                 token => $options{token},
+                logging => $options{data}->{logging},
                 data => {
                     message => "command execution issue",
                     command => $command->{command},
@@ -180,6 +185,7 @@ sub action_command {
                     socket => $options{socket_log},
                     code => $self->ACTION_FINISH_KO,
                     token => $options{token},
+                    logging => $options{data}->{logging},
                     data => {
                         message => "commands processing has been interrupted because of error"
                     }
@@ -193,6 +199,7 @@ sub action_command {
                 socket => $options{socket_log},
                 code => $self->ACTION_FINISH_OK,
                 token => $options{token},
+                logging => $options{data}->{logging},
                 instant => $command->{instant},
                 data => {
                     message => "command has finished successfully",
@@ -217,6 +224,7 @@ sub action_command {
             socket => $options{socket_log},
             code => $self->ACTION_FINISH_KO,
             token => $options{token},
+            logging => $options{data}->{logging},
             data => {
                 message => "commands processing has finished with errors"
             }
@@ -228,6 +236,7 @@ sub action_command {
         socket => $options{socket_log},
         code => $self->ACTION_FINISH_OK,
         token => $options{token},
+        logging => $options{data}->{logging},
         data => {
             message => "commands processing has finished successfully"
         }
@@ -258,6 +267,7 @@ sub action_processcopy {
             $self->send_log(
                 code => gorgone::class::module::ACTION_FINISH_KO,
                 token => $options{token},
+                logging => $options{data}->{logging},
                 data => { message => "file '$cache_file' open failed: $!" }
             );
 
@@ -276,6 +286,7 @@ sub action_processcopy {
         $self->send_log(
             code => gorgone::class::module::ACTION_FINISH_OK,
             token => $options{token},
+            logging => $options{data}->{logging},
             data => {
                 message => "process copy inprogress",
             }
@@ -300,6 +311,7 @@ sub action_processcopy {
                     $self->send_log(
                         code => gorgone::class::module::ACTION_FINISH_KO,
                         token => $options{token},
+                        logging => $options{data}->{logging},
                         data => { message => "untar failed: $stdout" }
                     );
                     $self->{logger}->writeLogError('[action] Copy processing - Untar failed: ' . $stdout);
@@ -309,6 +321,7 @@ sub action_processcopy {
                     $self->send_log(
                         code => gorgone::class::module::ACTION_FINISH_KO,
                         token => $options{token},
+                        logging => $options{data}->{logging},
                         data => { message => "untar failed ($exit_code): $stdout" }
                     );
                     $self->{logger}->writeLogError('[action] Copy processing - Untar failed: ' . $stdout);
@@ -324,6 +337,7 @@ sub action_processcopy {
             $self->send_log(
                 code => gorgone::class::module::ACTION_FINISH_KO,
                 token => $options{token},
+                logging => $options{data}->{logging},
                 data => { message => 'md5 does not match' }
             );
             $self->{logger}->writeLogError('[action] Copy processing - MD5 does not match');
@@ -336,6 +350,7 @@ sub action_processcopy {
     $self->send_log(
         code => gorgone::class::module::ACTION_FINISH_OK,
         token => $options{token},
+        logging => $options{data}->{logging},
         data => {
             message => "process copy finished successfully",
         }
@@ -363,6 +378,7 @@ sub action_run {
             socket => $socket_log,
             code => $self->ACTION_FINISH_KO,
             token => $options{token},
+            logging => $options{data}->{logging},
             data => { message => "action unknown" }
         );
         return -1;

@@ -309,7 +309,8 @@ sub proxy_ssh {
                 $self->send_log(
                     code => $_->{code},
                     token => $options{token},
-                    instant => $_->{instant},
+                    logging => $decoded_data->{logging},
+                    instant => $decoded_data->{instant},
                     data => $_->{data}
                 );
             }
@@ -321,6 +322,7 @@ sub proxy_ssh {
             $self->send_log(
                 code => gorgone::class::module::ACTION_FINISH_OK,
                 token => $options{token},
+                logging => $decoded_data->{logging},
                 data => $data_ret
             );
             last;
@@ -329,6 +331,7 @@ sub proxy_ssh {
         $self->send_log(
             code => gorgone::class::module::ACTION_FINISH_KO,
             token => $options{token},
+            logging => $decoded_data->{logging},
             data => $data_ret
         );
 

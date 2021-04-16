@@ -200,7 +200,7 @@ sub action_command {
                 code => $self->ACTION_FINISH_OK,
                 token => $options{token},
                 logging => $options{data}->{logging},
-                instant => $command->{instant},
+                instant => $options{data}->{instant},
                 data => {
                     message => "command has finished successfully",
                     command => $command->{command},

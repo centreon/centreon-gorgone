@@ -187,6 +187,7 @@ sub send_external_commands {
             target => $target,
             token => $token,
             data => {
+                logging => $options{logging},
                 content => {
                     command_file => $self->{pollers}->{$target}->{command_file},
                     commands => [
@@ -212,6 +213,7 @@ sub add_external_command {
             target => $options{target},
             token => $options{token},
             data => {
+                logging => $options{logging},
                 content => {
                     command_file => $self->{pollers}->{ $options{target} }->{command_file},
                     commands => [
@@ -247,7 +249,8 @@ sub execute_cmd {
             action => $options{action},
             param => $options{param},
             target => $options{target},
-            token => $options{token}
+            token => $options{token},
+            logging => $options{logging}
         );
         return 0;
     }
@@ -264,6 +267,7 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => {
                     source => $cache_dir . '/config/engine/' . $options{target},
                     destination => $self->{pollers}->{$options{target}}->{cfg_dir} . '/',
@@ -282,6 +286,7 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => {
                     source => $cache_dir . '/config/broker/' . $options{target},
                     destination => $self->{pollers}->{$options{target}}->{centreonbroker_cfg_path} . '/',
@@ -310,6 +315,7 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => {
                     source => $cache_dir . '/config/export/' . $options{target},
                     destination => $remote_dir,
@@ -333,6 +339,7 @@ sub execute_cmd {
             target => undef,
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => $cmd,
@@ -354,6 +361,7 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => {
                     source => $cache_dir_trap . '/' . $options{target} . '/centreontrapd.sdb',
                     destination => $self->{pollers}->{$options{target}}->{snmp_trapd_path_conf} . '/',
@@ -374,16 +382,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo ' . $cmd,
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'RESTART',
+                            centcore_cmd => 'RESTART'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'RELOAD') {
         my $cmd = $self->{pollers}->{$options{target}}->{engine_reload_command};
@@ -392,16 +401,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo ' . $cmd,
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'RELOAD',
+                            centcore_cmd => 'RELOAD'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'START') {
         my $cmd = $self->{pollers}->{$options{target}}->{engine_start_command};
@@ -410,16 +420,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo ' . $cmd,
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'START',
+                            centcore_cmd => 'START'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'STOP') {
         my $cmd = $self->{pollers}->{$options{target}}->{engine_stop_command};
@@ -428,16 +439,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo ' . $cmd,
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'STOP',
+                            centcore_cmd => 'STOP'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'RELOADBROKER') {
         my $cmd = $self->{pollers}->{$options{target}}->{broker_reload_command};
@@ -446,16 +458,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo ' . $cmd,
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'RELOADBROKER',
+                            centcore_cmd => 'RELOADBROKER'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'RESTARTCENTREONTRAPD') {
         my $cmd = $self->{pollers}->{$options{target}}->{init_script_centreontrapd};
@@ -464,16 +477,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo service ' . $cmd . ' restart',
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'RESTARTCENTREONTRAPD',
+                            centcore_cmd => 'RESTARTCENTREONTRAPD'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'RELOADCENTREONTRAPD') {
         my $cmd = $self->{pollers}->{$options{target}}->{init_script_centreontrapd};
@@ -482,16 +496,17 @@ sub execute_cmd {
             target => $options{target},
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => 'sudo service ' . $cmd . ' reload',
                         metadata => {
                             centcore_proxy => 1,
-                            centcore_cmd => 'RELOADCENTREONTRAPD',
+                            centcore_cmd => 'RELOADCENTREONTRAPD'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'STARTWORKER') {
         if (!defined($self->{clapi_password})) {
@@ -506,15 +521,16 @@ sub execute_cmd {
             target => undef,
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => $cmd,
                         metadata => {
-                            centcore_cmd => 'STARTWORKER',
+                            centcore_cmd => 'STARTWORKER'
                         }
                     }
                 ]
-            },
+            }
         );
     } elsif ($options{cmd} eq 'CREATEREMOTETASK') {
         if (!defined($self->{clapi_password})) {
@@ -530,15 +546,16 @@ sub execute_cmd {
             target => undef,
             token => $token,
             data => {
+                logging => $options{logging},
                 content => [
                     {
                         command => $cmd,
                         metadata => {
-                            centcore_cmd => 'CREATEREMOTETASK',
+                            centcore_cmd => 'CREATEREMOTETASK'
                         }
                     }
                 ]
-            },
+            }
         );
     }
 
@@ -591,7 +608,7 @@ sub handle_file {
         }
 
         if ($line =~ /^(.*?):([^:]*)(?::(.*)){0,1}/) {
-            $self->execute_cmd(action => 0, cmd => $1, target => $2, param => $3);
+            $self->execute_cmd(action => 0, cmd => $1, target => $2, param => $3, logging => 0);
             if ($self->{config}->{dirty_mode} != 1) {
                 my $current_pos = tell($handle);
                 seek($handle, $current_pos - bytes::length($line), 0);
@@ -663,7 +680,7 @@ sub handle_cmd_files {
     );
     $self->handle_centcore_cmd();
     $self->handle_centcore_dir();
-    $self->send_external_commands();
+    $self->send_external_commands(logging => 0);
 }
 
 sub action_centreoncommand {
@@ -689,6 +706,7 @@ sub action_centreoncommand {
         $self->get_clapi_user() == -1 ||
         $self->get_illegal_characters() == -1
     ) {
+        $self->{logger}->writeLogError('[legacycmd] cannot get centreon database configuration');
         $self->send_log(code => gorgone::class::module::ACTION_FINISH_KO, token => $options{token}, data => { message => 'cannot get centreon database configuration' });
         return 1;
     }
@@ -699,7 +717,8 @@ sub action_centreoncommand {
             token => $options{token},
             target => $command->{target},
             cmd => $command->{command},
-            param => $command->{param}
+            param => $command->{param},
+            logging => 1
         );
 
         if ($code == -1) {

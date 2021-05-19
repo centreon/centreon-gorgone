@@ -61,7 +61,7 @@ sub handle_HUP {
 
 sub handle_TERM {
     my $self = shift;
-    $self->{logger}->writeLogDebug("[legacycmd] $$ Receiving order to stop...");
+    $self->{logger}->writeLogDebug("[audit] $$ Receiving order to stop...");
     $self->{stop} = 1;
 }
 

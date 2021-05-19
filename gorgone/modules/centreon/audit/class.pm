@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package gorgone::modules::centreon::legacycmd::class;
+package gorgone::modules::centreon::audit::class;
 
 use base qw(gorgone::class::module);
 
@@ -30,7 +30,6 @@ use gorgone::standard::misc;
 use gorgone::class::sqlquery;
 use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
-use File::Copy;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -40,21 +39,7 @@ sub new {
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
-    if (!defined($connector->{config}->{cmd_file}) || $connector->{config}->{cmd_file} eq '') {
-        $connector->{config}->{cmd_file} = '/var/lib/centreon/centcore.cmd';
-    }
-    if (!defined($connector->{config}->{cmd_dir}) || $connector->{config}->{cmd_dir} eq '') {
-        $connector->{config}->{cmd_dir} = '/var/lib/centreon/centcore/';
-    }
-    $connector->{config}->{bulk_external_cmd} =
-        defined($connector->{config}->{bulk_external_cmd}) && $connector->{config}->{bulk_external_cmd} =~ /(\d+)/ ? $1 : 50;
-    $connector->{config}->{bulk_external_cmd_sequential} =
-        defined($connector->{config}->{bulk_external_cmd_sequential}) && $connector->{config}->{bulk_external_cmd_sequential} =~ /^False|0$/i ? 0 : 1;
-    $connector->{config}->{dirty_mode} = defined($connector->{config}->{dirty_mode}) ? $connector->{config}->{dirty_mode} : 1;
-    $connector->{gorgone_illegal_characters} = '`';
-    $connector->{cache_refresh_interval} = 60;
-    $connector->{cache_refresh_last} = -1;
-    $connector->{bulk_commands} = {};
+    $connector->{audit_tokens} = {};
 
     $connector->set_signal_handlers();
     return $connector;
@@ -92,657 +77,96 @@ sub class_handle_HUP {
     }
 }
 
-sub cache_refresh {
+sub action_centreonauditnode {
     my ($self, %options) = @_;
 
-    return if ((time() - $self->{cache_refresh_interval}) < $self->{cache_refresh_last});
-    $self->{cache_refresh_last} = time();
-    
-    # get pollers config
-    $self->{pollers} = undef;
-    my ($status, $datas) = $self->{class_object_centreon}->custom_execute(
-        request => 'SELECT nagios_server_id, command_file, cfg_dir, centreonbroker_cfg_path, snmp_trapd_path_conf, ' .
-            'engine_start_command, engine_stop_command, engine_restart_command, engine_reload_command, ' .
-            'broker_reload_command, init_script_centreontrapd ' .
-            'FROM cfg_nagios, nagios_server ' .
-            "WHERE nagios_server.id = cfg_nagios.nagios_server_id AND cfg_nagios.nagios_activate = '1'",
-        mode => 1,
-        keys => 'nagios_server_id'
-    );
-    if ($status == -1 || !defined($datas)) {
-        $self->{logger}->writeLogError('[legacycmd] Cannot get configuration for pollers');
-        return ;
-    }
+    $self->{logger}->writeLogDebug('[audit] action node starting');
+    $options{token} = $self->generate_token() if (!defined($options{token}));
 
-    $self->{pollers} = $datas;
+    $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action node starting' });
 
-    # get clapi user
-    $self->{clapi_user} = undef;
-    $self->{clapi_password} = undef;
-    ($status, $datas) = $self->{class_object_centreon}->custom_execute(
-        request => "SELECT contact_alias, contact_passwd " .
-            "FROM `contact` " .
-            "WHERE `contact_admin` = '1' " . 
-            "AND `contact_activate` = '1' " .
-            "AND `contact_passwd` IS NOT NULL " .
-            "LIMIT 1 ",
-        mode => 2
-    );
+    # je check la
 
-    if ($status == -1 || !defined($datas->[0]->[0])) {
-        $self->{logger}->writeLogInfo('[legacycmd] Cannot get configuration for CLAPI user');
-    } else {
-        my $clapi_user = $datas->[0]->[0];
-        my $clapi_password = $datas->[0]->[1];
-        if ($clapi_password =~ m/^md5__(.*)/) {
-            $clapi_password = $1;
-        }
-
-        $self->{clapi_user} = $clapi_user;
-        $self->{clapi_password} = $clapi_password;
-    }
-
-    # check illegal characters
-    ($status, $datas) = $self->{class_object_centreon}->custom_execute(
-        request => "SELECT `value` FROM options WHERE `key` = 'gorgone_illegal_characters'",
-        mode => 2
-    );
-    if ($status == -1) { 
-        $self->{logger}->writeLogError('[legacycmd] Cannot get illegal characters');
-        return ;
-    }
-
-    if (defined($datas->[0]->[0])) {
-        $self->{gorgone_illegal_characters} = $datas->[0]->[0];
-    }
-}
-
-sub check_pollers_config {
-    my ($self, %options) = @_;
-
-    return defined($self->{pollers}) ? 1 : 0;
-}
-
-sub send_external_commands {
-    my ($self, %options) = @_;
-    my $token = $options{token};
-    $token = $self->generate_token() if (!defined($token));
-
-    my $targets = [];
-    $targets = [$options{target}] if (defined($options{target}));
-    if (scalar(@$targets) <= 0) {
-        $targets = [keys %{$self->{bulk_commands}}];
-    }
-
-    foreach my $target (@$targets) {
-        next if (!defined($self->{bulk_commands}->{$target}) || scalar(@{$self->{bulk_commands}->{$target}}) <= 0);
-        $self->send_internal_action(
-            action => 'ENGINECOMMAND',
-            target => $target,
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => {
-                    command_file => $self->{pollers}->{$target}->{command_file},
-                    commands => [
-                        join("\n", @{$self->{bulk_commands}->{$target}})
-                    ]
-                }
-            }
-        );
-
-        $self->{logger}->writeLogDebug("[legacycmd] send external commands for '$target'");
-        $self->{bulk_commands}->{$target} = [];
-    }
-}
-
-sub add_external_command {
-    my ($self, %options) = @_;
-
-    $options{param} =~ s/[\Q$self->{gorgone_illegal_characters}\E]//g
-        if (defined($self->{gorgone_illegal_characters}) && $self->{gorgone_illegal_characters} ne '');
-    if ($options{action} == 1) {
-        $self->send_internal_action(
-            action => 'ENGINECOMMAND',
-            target => $options{target},
-            token => $options{token},
-            data => {
-                logging => $options{logging},
-                content => {
-                    command_file => $self->{pollers}->{ $options{target} }->{command_file},
-                    commands => [
-                        $options{param}
-                    ]
-                }
-            }
-        );
-    } else {
-        $self->{bulk_commands}->{ $options{target} } = [] if (!defined($self->{bulk_commands}->{ $options{target} }));
-        push @{$self->{bulk_commands}->{ $options{target} }}, $options{param};
-        if (scalar(@{$self->{bulk_commands}->{ $options{target} }}) > $self->{config}->{bulk_external_cmd}) {
-            $self->send_external_commands(%options);
-        }
-    }
-}
-
-sub execute_cmd {
-    my ($self, %options) = @_;
-
-    chomp $options{target};
-    chomp $options{param} if (defined($options{param}));
-    my $token = $options{token};
-    $token = $self->generate_token() if (!defined($token));
-
-    my $msg = "[legacycmd] Handling command '" . $options{cmd} . "'";
-    $msg .= ", Target: '" . $options{target} . "'" if (defined($options{target}));
-    $msg .= ", Parameters: '" . $options{param} . "'" if (defined($options{param}));
-    $self->{logger}->writeLogInfo($msg);
-
-    if ($options{cmd} eq 'EXTERNALCMD') {
-        $self->add_external_command(
-            action => $options{action},
-            param => $options{param},
-            target => $options{target},
-            token => $options{token},
-            logging => $options{logging}
-        );
-        return 0;
-    }
-
-    $self->send_external_commands(target => $options{target})
-        if (defined($options{target}) && $self->{config}->{bulk_external_cmd_sequential} == 1);
-
-    if ($options{cmd} eq 'SENDCFGFILE') {
-        my $cache_dir = (defined($connector->{config}->{cache_dir}) && $connector->{config}->{cache_dir} ne '') ?
-            $connector->{config}->{cache_dir} : '/var/cache/centreon';
-        # engine
-        $self->send_internal_action(
-            action => 'REMOTECOPY',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => {
-                    source => $cache_dir . '/config/engine/' . $options{target},
-                    destination => $self->{pollers}->{$options{target}}->{cfg_dir} . '/',
-                    cache_dir => $cache_dir,
-                    owner => 'centreon-engine',
-                    group => 'centreon-engine',
-                    metadata => {
-                        centcore_proxy => 1,
-                        centcore_cmd => 'SENDCFGFILE'
-                    }
-                }
-            }
-        );
-        # broker
-        $self->send_internal_action(
-            action => 'REMOTECOPY',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => {
-                    source => $cache_dir . '/config/broker/' . $options{target},
-                    destination => $self->{pollers}->{$options{target}}->{centreonbroker_cfg_path} . '/',
-                    cache_dir => $cache_dir,
-                    owner => 'centreon-broker',
-                    group => 'centreon-broker',
-                    metadata => {
-                        centcore_proxy => 1,
-                        centcore_cmd => 'SENDCFGFILE'
-                    }
-                }
-            }
-        );
-    } elsif ($options{cmd} eq 'SENDEXPORTFILE') {
-        if (!defined($self->{clapi_password})) {
-            return (-1, 'need centreon clapi password to execute SENDEXPORTFILE command');
-        }
-
-        my $cache_dir = (defined($connector->{config}->{cache_dir}) && $connector->{config}->{cache_dir} ne '') ?
-            $connector->{config}->{cache_dir} : '/var/cache/centreon';
-        my $remote_dir = (defined($connector->{config}->{remote_dir})) ?
-            $connector->{config}->{remote_dir} : '/var/cache/centreon/config/remote-data/';
-        # remote server
-        $self->send_internal_action(
-            action => 'REMOTECOPY',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => {
-                    source => $cache_dir . '/config/export/' . $options{target},
-                    destination => $remote_dir,
-                    cache_dir => $cache_dir,
-                    owner => 'centreon',
-                    group => 'centreon',
-                    metadata => {
-                        centcore_cmd => 'SENDEXPORTFILE'
-                    }
-                }
-            }
-        );
-
-        # Forward data use to be done by createRemoteTask as well as task_id in a gorgone command
-        # Command name: AddImportTaskWithParent
-        # Data: ['parent_id' => $task->getId()]
-        $self->send_internal_action(
-            action => 'ADDIMPORTTASKWITHPARENT',
-            token => $options{token},
-            target => $options{target},
-            data => {
-                logging => $options{logging},
-                content => {
-                    parent_id => $options{param}
-                }
-            }
-        );
-    } elsif ($options{cmd} eq 'SYNCTRAP') {
-        my $cache_dir = (defined($connector->{config}->{cache_dir}) && $connector->{config}->{cache_dir} ne '') ?
-            $connector->{config}->{cache_dir} : '/var/cache/centreon';
-        my $cache_dir_trap = (defined($connector->{config}->{cache_dir_trap}) && $connector->{config}->{cache_dir_trap} ne '') ?
-            $connector->{config}->{cache_dir_trap} : '/etc/snmp/centreon_traps/';
-        # centreontrapd
-        $self->send_internal_action(
-            action => 'REMOTECOPY',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => {
-                    source => $cache_dir_trap . '/' . $options{target} . '/centreontrapd.sdb',
-                    destination => $self->{pollers}->{$options{target}}->{snmp_trapd_path_conf} . '/',
-                    cache_dir => $cache_dir,
-                    owner => 'centreon',
-                    group => 'centreon',
-                    metadata => {
-                        centcore_proxy => 1,
-                        centcore_cmd => 'SYNCTRAP'
-                    }
-                }
-            }
-        );
-    } elsif ($options{cmd} eq 'RESTART') {
-        my $cmd = $self->{pollers}->{$options{target}}->{engine_restart_command};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo ' . $cmd,
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'RESTART'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'RELOAD') {
-        my $cmd = $self->{pollers}->{$options{target}}->{engine_reload_command};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo ' . $cmd,
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'RELOAD',
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'START') {
-        my $cmd = $self->{pollers}->{$options{target}}->{engine_start_command};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo ' . $cmd,
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'START'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'STOP') {
-        my $cmd = $self->{pollers}->{$options{target}}->{engine_stop_command};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo ' . $cmd,
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'STOP'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'RELOADBROKER') {
-        my $cmd = $self->{pollers}->{$options{target}}->{broker_reload_command};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo ' . $cmd,
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'RELOADBROKER'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'RESTARTCENTREONTRAPD') {
-        my $cmd = $self->{pollers}->{$options{target}}->{init_script_centreontrapd};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo service ' . $cmd . ' restart',
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'RESTARTCENTREONTRAPD'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'RELOADCENTREONTRAPD') {
-        my $cmd = $self->{pollers}->{$options{target}}->{init_script_centreontrapd};
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => $options{target},
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => 'sudo service ' . $cmd . ' reload',
-                        metadata => {
-                            centcore_proxy => 1,
-                            centcore_cmd => 'RELOADCENTREONTRAPD'
-                        }
-                    }
-                ]
-            }
-        );
-    } elsif ($options{cmd} eq 'STARTWORKER') {
-        if (!defined($self->{clapi_password})) {
-            return (-1, 'need centreon clapi password to execute STARTWORKER command');
-        }
-        my $centreon_dir = (defined($connector->{config}->{centreon_dir})) ?
-            $connector->{config}->{centreon_dir} : '/usr/share/centreon';
-        my $cmd = $centreon_dir . '/bin/centreon -u ' . $self->{clapi_user} . ' -p ' .
-            $self->{clapi_password} . ' -w -o CentreonWorker -a processQueue';
-        $self->send_internal_action(
-            action => 'COMMAND',
-            target => undef,
-            token => $token,
-            data => {
-                logging => $options{logging},
-                content => [
-                    {
-                        command => $cmd,
-                        metadata => {
-                            centcore_cmd => 'STARTWORKER'
-                        }
-                    }
-                ]
-            }
-        );
-    }
-
-    return 0;
-}
-
-sub action_addimporttaskwithparent {
-    my ($self, %options) = @_;
-
-    if (!defined($options{data}->{content}->{parent_id})) {
-        $self->send_log(
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            logging => $options{data}->{logging},
-            data => {
-                message => "expected parent_id task ID, found '" . $options{data}->{content}->{parent_id} . "'",
-            }
-        );
-        return -1;
-    }
-
-    my ($status, $datas) = $self->{class_object_centreon}->custom_execute(
-        request => "INSERT INTO task (`type`, `status`, `parent_id`) VALUES ('import', 'pending', '" . $options{data}->{content}->{parent_id} . "')"
-    );
-    if ($status == -1) {
-        $self->send_log(
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            logging => $options{data}->{logging},
-            data => {
-                message => "Cannot add import task on Remote Server.",
-            }
-        );
-        return -1;
-    }
-
-    my $centreon_dir = (defined($connector->{config}->{centreon_dir})) ?
-        $connector->{config}->{centreon_dir} : '/usr/share/centreon';
-    my $cmd = $centreon_dir . '/bin/centreon -u ' . $self->{clapi_user} . ' -p ' .
-        $self->{clapi_password} . ' -w -o CentreonWorker -a processQueue';
-    $self->send_internal_action(
-        action => 'COMMAND',
-        token => $options{token},
-        data => {
-            logging => $options{data}->{logging},
-            content => [
-                {
-                    command => $cmd
-                }
-            ]
-        }
-    );
-    
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
         token => $options{token},
-        logging => $options{data}->{logging},
-        data => {
-            message => 'Task inserted on Remote Server',
-        }
+        data => { message => 'action node finished' }
     );
-
-    return 0;
+    $self->{logger}->writeLogDebug('[audit] action node finished');
 }
 
-sub move_cmd_file {
+sub action_centreonauditnodelistener {
     my ($self, %options) = @_;
 
-    my $operator = '+<:encoding(UTF-8)';
-    if ($self->{config}->{dirty_mode} == 1) {
-        $operator = '<:encoding(UTF-8)';
-    }
-    my $handle;
-    if (-e $options{dst}) {
-        if (!open($handle, $operator, $options{dst})) {
-            $self->{logger}->writeLogError("[legacycmd] Cannot open file '" . $options{dst} . "': $!");
-            return -1;
-        }
-        
-        return (0, $handle);
-    }
+    use Data::Dumper; print Data::Dumper::Dumper($options{data});
+    print Data::Dumper::Dumper($options{token} . "===");
 
-    return -1 if (!defined($options{src}));
-    return -1 if (! -e $options{src});
+    return 0 if (!defined($options{token}) || $options{token} !~ /^audit-(.*?)-(.*)$/);
+    my ($audit_token, $audit_node) = ($1, $2);
 
-    if (!File::Copy::move($options{src}, $options{dst})) {
-        $self->{logger}->writeLogError("[legacycmd] Cannot move file '" . $options{src} . "': $!");
-        return -1;
+    return 0 if (!defined($self->{audit_tokens}->{ $audit_token }) || !defined($self->{audit_tokens}->{ $audit_token }->{ $audit_node }));
+
+    if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
+        $self->{logger}->writeLogError("[audit] audit node listener - node '" . $audit_node . "' error");
+        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{status} = 'error';
+        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{message_error} = $options{data}->{data}->{message};
+    } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
+        $self->{logger}->writeLogDebug("[audit] audit node listener - node '" . $audit_node . "' ok");
+        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{status} = 'ok';
     }
 
-    if (!open($handle, $operator, $options{dst})) {
-        $self->{logger}->writeLogError("[legacycmd] Cannot open file '" . $options{dst} . "': $!");
-        return -1;
-    }
+    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token }->{ $audit_node });
 
-    return (0, $handle);
+    return 1;
 }
 
-sub handle_file {
-    my ($self, %options) = @_;
-    require bytes;
-
-    $self->{logger}->writeLogDebug("[legacycmd] Processing file '" . $options{file} . "'");
-    my $handle = $options{handle};
-    while (my $line = <$handle>) {
-        if ($self->{stop} == 1) {
-            close($handle);
-            return -1;
-        }
-
-        if ($line =~ /^(.*?):([^:]*)(?::(.*)){0,1}/) {
-            $self->execute_cmd(action => 0, cmd => $1, target => $2, param => $3, logging => 0);
-            if ($self->{config}->{dirty_mode} != 1) {
-                my $current_pos = tell($handle);
-                seek($handle, $current_pos - bytes::length($line), 0);
-                syswrite($handle, '-');
-                # line is useless
-                $line = <$handle>;
-            }
-        }
-    }
-
-    close($handle);
-    unlink($options{file});
-    return 0;
-}
-
-sub handle_centcore_cmd {
+sub action_centreonauditschedule {
     my ($self, %options) = @_;
 
-    my ($code, $handle) = $self->move_cmd_file(
-        src => $self->{config}->{cmd_file},
-        dst => $self->{config}->{cmd_file} . '_read',
-    );
-    return if ($code == -1);
-    $self->handle_file(handle => $handle, file => $self->{config}->{cmd_file} . '_read');
-}
-
-sub handle_centcore_dir {
-    my ($self, %options) = @_;
-    
-    my ($dh, @files);
-    if (!opendir($dh, $self->{config}->{cmd_dir})) {
-        $self->{logger}->writeLogError("[legacycmd] Cannot open directory '" . $self->{config}->{cmd_dir} . "': $!");
-        return ;
-    }
-    @files = sort {
-        (stat($self->{config}->{cmd_dir} . '/' . $a))[10] <=> (stat($self->{config}->{cmd_dir} . '/' . $b))[10]
-    } (readdir($dh));
-    closedir($dh);
-
-    my ($code, $handle);
-    foreach (@files) {
-        next if ($_ =~ /^\./);
-        my $file = $self->{config}->{cmd_dir} . '/' . $_;
-        if ($file =~ /_read$/) {
-            ($code, $handle) = $self->move_cmd_file(
-                dst => $file,
-            );
-        } else {
-            ($code, $handle) = $self->move_cmd_file(
-                src => $file,
-                dst => $file . '_read',
-            );
-            $file .= '_read';
-        }
-        return if ($code == -1);
-        if ($self->handle_file(handle => $handle, file => $file) == -1) {
-            return ;
-        }
-    }
-}
-
-sub handle_cmd_files {
-    my ($self, %options) = @_;
-
-    return if ($self->check_pollers_config() == 0);
-    $self->handle_centcore_cmd();
-    $self->handle_centcore_dir();
-    $self->send_external_commands(logging => 0);
-}
-
-sub action_centreoncommand {
-    my ($self, %options) = @_;
-
-    $self->{logger}->writeLogDebug('[legacycmd] -class- start centreoncommand');
+    $self->{logger}->writeLogDebug('[audit] starting schedule action');
     $options{token} = $self->generate_token() if (!defined($options{token}));
-    $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action centreoncommand proceed' });
+    $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action schedule proceed' });
 
-    if (!defined($options{data}->{content}) || ref($options{data}->{content}) ne 'ARRAY') {
-        $self->send_log(
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            data => {
-                message => "expected array, found '" . ref($options{data}->{content}) . "'",
-            }
-        );
-        return -1;
-    }
-
-    if ($self->check_pollers_config() == 0) {
-        $self->{logger}->writeLogError('[legacycmd] cannot get centreon database configuration');
-        $self->send_log(code => GORGONE_ACTION_FINISH_KO, token => $options{token}, data => { message => 'cannot get centreon database configuration' });
+    my ($status, $datas) = $self->{class_object}->custom_execute(
+        request => "SELECT id, name FROM nagios_server WHERE ns_activate = '1'",
+        mode => 2
+    );
+    if ($status == -1) {
+        $self->send_log(code => GORGONE_ACTION_FINISH_KO, token => $options{token}, data => { message => 'cannot find nodes configuration' });
+        $self->{logger}->writeLogError('[audit] Cannot find nodes configuration');
         return 1;
     }
 
-    foreach my $command (@{$options{data}->{content}}) {
-        my ($code, $message) = $self->execute_cmd(
-            action => 1,
-            token => $options{token},
-            target => $command->{target},
-            cmd => $command->{command},
-            param => $command->{param},
-            logging => 1
+    $self->{audit_tokens}->{ $options{token} } = {};
+    foreach (@$datas) {
+        $self->send_internal_action(
+            action => 'ADDLISTENER',
+            data => [
+                {
+                    identity => 'gorgone-audit',
+                    event => 'CENTREONAUDITNODELISTENER',
+                    token => 'audit-' . $options{token} . '-' . $_->[0],
+                    timeout => 300
+                }
+            ]
+        );
+        $self->send_internal_action(
+            action => 'CENTREONAUDITNODE',
+            target => $_->[0],
+            token => 'audit-' . $options{token} . '-' . $_->[0],
+            data => {
+                instant => 1,
+                content => {}
+            }
         );
 
-        if ($code == -1) {
-            $self->{logger}->writeLogError('[legacycmd] -class- ' . $message);
-            $self->send_log(code => GORGONE_ACTION_FINISH_KO, token => $options{token}, data => { message => $message });
-            return 1;
-        }
+        $self->{audit_tokens}->{ $options{token} }->{ $_->[0] } = {
+            name => $_->[1],
+            status => 'wip',
+            message_error => '-'
+        };
     }
 
-    $self->{logger}->writeLogDebug('[legacycmd] -class- finish centreoncommand');
     return 0;
 }
 
@@ -751,7 +175,7 @@ sub event {
         my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
         last if (!defined($message));
 
-        $connector->{logger}->writeLogDebug("[legacycmd] Event: $message");
+        $connector->{logger}->writeLogDebug("[audit] Event: $message");
         if ($message =~ /^\[(.*?)\]/) {
             if ((my $method = $connector->can('action_' . lc($1)))) {
                 $message =~ /^\[(.*?)\]\s+\[(.*?)\]\s+\[.*?\]\s+(.*)$/m;
@@ -763,19 +187,25 @@ sub event {
     }
 }
 
+sub sampling {
+    my ($self, %options) = @_;
+
+    $self->{logger}->writeLogDebug('[audit] sampling starting');
+}
+
 sub run {
     my ($self, %options) = @_;
 
     # Connect internal
     $connector->{internal_socket} = gorgone::standard::library::connect_com(
         zmq_type => 'ZMQ_DEALER',
-        name => 'gorgone-legacycmd',
+        name => 'gorgone-audit',
         logger => $self->{logger},
         type => $self->{config_core}->{internal_com_type},
         path => $self->{config_core}->{internal_com_path}
     );
     $connector->send_internal_action(
-        action => 'LEGACYCMDREADY',
+        action => 'CENTREONAUDITREADY',
         data => {}
     );
 
@@ -783,13 +213,10 @@ sub run {
         dsn => $self->{config_db_centreon}->{dsn},
         user => $self->{config_db_centreon}->{username},
         password => $self->{config_db_centreon}->{password},
-        force => 2,
+        force => 0,
         logger => $self->{logger}
     );
-    $self->{class_object_centreon} = gorgone::class::sqlquery->new(
-        logger => $self->{logger},
-        db_centreon => $self->{db_centreon}
-    );
+    $self->{class_object} = gorgone::class::sqlquery->new(logger => $self->{logger}, db_centreon => $self->{db_centreon});
 
     $self->{poll} = [
         {
@@ -800,15 +227,14 @@ sub run {
     ];
     while (1) {
         # we try to do all we can
-        my $rev = zmq_poll($self->{poll}, 2000);
+        my $rev = zmq_poll($self->{poll}, 5000);
         if ($rev == 0 && $self->{stop} == 1) {
-            $self->{logger}->writeLogInfo("[legacycmd] $$ has quit");
+            $self->{logger}->writeLogInfo("[audit] $$ has quit");
             zmq_close($connector->{internal_socket});
             exit(0);
         }
 
-        $self->cache_refresh();
-        $self->handle_cmd_files();
+        $self->sampling();
     }
 }
 

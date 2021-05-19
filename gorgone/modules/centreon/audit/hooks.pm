@@ -18,39 +18,37 @@
 # limitations under the License.
 #
 
-package gorgone::modules::centreon::legacycmd::hooks;
+package gorgone::modules::centreon::audit::hooks;
 
 use warnings;
 use strict;
 use gorgone::class::core;
-use gorgone::modules::centreon::legacycmd::class;
+use gorgone::modules::centreon::audit::class;
 use gorgone::standard::constants qw(:all);
 use JSON::XS;
 
 use constant NAMESPACE => 'centreon';
-use constant NAME => 'legacycmd';
+use constant NAME => 'audit';
 use constant EVENTS => [
-    { event => 'CENTREONCOMMAND', uri => '/command', method => 'POST' },
-    { event => 'LEGACYCMDREADY' },
-    { event => 'ADDIMPORTTASKWITHPARENT' }
+    { event => 'CENTREONAUDITSCHEDULE', uri => '/schedule', method => 'POST' },
+    { event => 'CENTREONAUDITNODE', uri => '/node', method => 'POST' },
+    { event => 'CENTREONAUDITNODELISTENER' },
+    { event => 'CENTREONAUDITREADY' }
 ];
 
 my $config_core;
 my $config;
-my $legacycmd = {};
+my $audit = {};
 my $stop = 0;
-my $config_db_centreon;
+my ($config_db_centreon, $config_db_centstorage);
 
 sub register {
     my (%options) = @_;
     
     $config = $options{config};
     $config_core = $options{config_core};
+    $config_db_centstorage = $options{config_db_centstorage};
     $config_db_centreon = $options{config_db_centreon};
-    $config->{cmd_file} = defined($config->{cmd_file}) ? $config->{cmd_file} : '/var/lib/centreon/centcore.cmd';
-    $config->{cache_dir} = defined($config->{cache_dir}) ? $config->{cache_dir} : '/var/cache/centreon/';
-    $config->{cache_dir_trap} = defined($config->{cache_dir_trap}) ? $config->{cache_dir_trap} : '/etc/snmp/centreon_traps/';
-    $config->{remote_dir} = defined($config->{remote_dir}) ? $config->{remote_dir} : '/var/lib/centreon/remote-data/';
     return (1, NAMESPACE, NAME, EVENTS);
 }
 
@@ -68,28 +66,28 @@ sub routing {
         $data = JSON::XS->new->utf8->decode($options{data});
     };
     if ($@) {
-        $options{logger}->writeLogError("[legacycmd] Cannot decode json data: $@");
+        $options{logger}->writeLogError("[audit] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
-            data => { message => 'gorgone-legacycmd: cannot decode json' },
+            data => { message => 'gorgone-audit: cannot decode json' },
             json_encode => 1
         );
         return undef;
     }
     
-    if ($options{action} eq 'LEGACYCMDREADY') {
-        $legacycmd->{ready} = 1;
+    if ($options{action} eq 'CENTREONAUDITREADY') {
+        $audit->{ready} = 1;
         return undef;
     }
     
-    if (gorgone::class::core::waiting_ready(ready => \$legacycmd->{ready}) == 0) {
+    if (gorgone::class::core::waiting_ready(ready => \$audit->{ready}) == 0) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
-            data => { message => 'gorgone-legacycmd: still no ready' },
+            data => { message => 'gorgone-audit: still no ready' },
             json_encode => 1
         );
         return undef;
@@ -97,7 +95,7 @@ sub routing {
     
     gorgone::standard::library::zmq_send_message(
         socket => $options{socket},
-        identity => 'gorgone-legacycmd',
+        identity => 'gorgone-audit',
         action => $options{action},
         data => $options{data},
         token => $options{token},
@@ -108,18 +106,18 @@ sub gently {
     my (%options) = @_;
 
     $stop = 1;
-    $options{logger}->writeLogDebug("[legacycmd] Send TERM signal");
-    if ($legacycmd->{running} == 1) {
-        CORE::kill('TERM', $legacycmd->{pid});
+    $options{logger}->writeLogDebug("[audit] Send TERM signal");
+    if ($audit->{running} == 1) {
+        CORE::kill('TERM', $audit->{pid});
     }
 }
 
 sub kill {
     my (%options) = @_;
 
-    if ($legacycmd->{running} == 1) {
-        $options{logger}->writeLogDebug("[legacycmd] Send KILL signal for pool");
-        CORE::kill('KILL', $legacycmd->{pid});
+    if ($audit->{running} == 1) {
+        $options{logger}->writeLogDebug("[audit] Send KILL signal for child");
+        CORE::kill('KILL', $audit->{pid});
     }
 }
 
@@ -134,17 +132,17 @@ sub check {
     my $count = 0;
     foreach my $pid (keys %{$options{dead_childs}}) {
         # Not me
-        next if (!defined($legacycmd->{pid}) || $legacycmd->{pid} != $pid);
+        next if (!defined($audit->{pid}) || $audit->{pid} != $pid);
         
-        $legacycmd = {};
+        $audit = {};
         delete $options{dead_childs}->{$pid};
         if ($stop == 0) {
             create_child(logger => $options{logger});
         }
     }
-    
-    $count++  if (defined($legacycmd->{running}) && $legacycmd->{running} == 1);
-    
+
+    $count++  if (defined($audit->{running}) && $audit->{running} == 1);
+
     return $count;
 }
 
@@ -158,23 +156,24 @@ sub broadcast {
 sub create_child {
     my (%options) = @_;
     
-    $options{logger}->writeLogInfo("[legacycmd] Create module 'legacycmd' process");
+    $options{logger}->writeLogInfo("[audit] Create module 'audit' process");
 
     my $child_pid = fork();
     if ($child_pid == 0) {
-        $0 = 'gorgone-legacycmd';
-        my $module = gorgone::modules::centreon::legacycmd::class->new(
+        $0 = 'gorgone-audit';
+        my $module = gorgone::modules::centreon::audit::class->new(
             logger => $options{logger},
             module_id => NAME,
             config_core => $config_core,
             config => $config,
             config_db_centreon => $config_db_centreon,
+            config_db_centstorage => $config_db_centstorage
         );
         $module->run();
         exit(0);
     }
-    $options{logger}->writeLogDebug("[legacycmd] PID $child_pid (gorgone-legacycmd)");
-    $legacycmd = { pid => $child_pid, ready => 0, running => 1 };
+    $options{logger}->writeLogDebug("[audit] PID $child_pid (gorgone-audit)");
+    $audit = { pid => $child_pid, ready => 0, running => 1 };
 }
 
 1;

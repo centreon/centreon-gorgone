@@ -7,7 +7,7 @@ This module aims to extend Centreon Autodiscovery server functionalities.
 ## Configuration
 
 | Directive       | Description                                                            | Default value |
-|:----------------|:-----------------------------------------------------------------------|:--------------|
+| :-------------- | :--------------------------------------------------------------------- | :------------ |
 | global\_timeout | Time in seconds before a discovery command is considered timed out     | `300`         |
 | check\_interval | Time in seconds defining frequency at which results will be search for | `15`          |
 
@@ -24,7 +24,7 @@ check_interval: 10
 ## Events
 
 | Event                    | Description                                     |
-|:-------------------------|:------------------------------------------------|
+| :----------------------- | :---------------------------------------------- |
 | AUTODISCOVERYREADY       | Internal event to notify the core               |
 | HOSTDISCOVERYLISTENER    | Internal event to get host discovery results    |
 | SERVICEDISCOVERYLISTENER | Internal event to get service discovery results |
@@ -38,20 +38,20 @@ check_interval: 10
 ### Add a host discovery job
 
 | Endpoint                      | Method |
-|:------------------------------|:-------|
+| :---------------------------- | :----- |
 | /centreon/autodiscovery/hosts | `POST` |
 
 #### Headers
 
 | Header       | Value            |
-|:-------------|:-----------------|
+| :----------- | :--------------- |
 | Accept       | application/json |
 | Content-Type | application/json |
 
 #### Body
 
 | Key             | Value                                                      |
-|:----------------|:-----------------------------------------------------------|
+| :-------------- | :--------------------------------------------------------- |
 | job\_id         | ID of the Host Discovery job                               |
 | target          | Identifier of the target on which to execute the command   |
 | command_line    | Command line to execute to perform the discovery           |
@@ -62,14 +62,14 @@ check_interval: 10
 With the following keys for the `execution` entry:
 
 | Key        | Value                                           |
-|:-----------|:------------------------------------------------|
+| :--------- | :---------------------------------------------- |
 | mode       | Execution mode ('0': immediate, '1': scheduled) |
 | parameters | Parameters needed by execution mode             |
 
 With the following keys for the `post_execution` entry:
 
 | Key      | Value                            |
-|:---------|:---------------------------------|
+| :------- | :------------------------------- |
 | commands | Array of commands to be executed |
 
 ```json
@@ -187,19 +187,19 @@ curl --request POST "https://hostname:8443/api/centreon/autodiscovery/hosts" \
 ### Launch a host discovery job
 
 | Endpoint                                   | Method |
-|:-------------------------------------------|:-------|
+| :----------------------------------------- | :----- |
 | /centreon/autodiscovery/hosts/:id/schedule | `GET`  |
 
 #### Headers
 
 | Header       | Value            |
-|:-------------|:-----------------|
+| :----------- | :--------------- |
 | Accept       | application/json |
 
 #### Path variables
 
 | Variable | Description           |
-|:---------|:----------------------|
+| :------- | :-------------------- |
 | id       | Identifier of the job |
 
 #### Example
@@ -212,19 +212,19 @@ curl --request GET "https://hostname:8443/api/centreon/autodiscovery/hosts/:id/s
 ### Delete a host discovery job
 
 | Endpoint                             | Method   |
-|:-------------------------------------|:---------|
+| :----------------------------------- | :------- |
 | /centreon/autodiscovery/hosts/:token | `DELETE` |
 
 #### Headers
 
 | Header | Value            |
-|:-------|:-----------------|
+| :----- | :--------------- |
 | Accept | application/json |
 
 #### Path variables
 
 | Variable | Description                |
-|:---------|:---------------------------|
+| :------- | :------------------------- |
 | token    | Token of the scheduled job |
 
 #### Example
@@ -237,27 +237,27 @@ curl --request DELETE "https://hostname:8443/api/centreon/autodiscovery/hosts/di
 ### Execute a service discovery job
 
 | Endpoint                         | Method |
-|:---------------------------------|:-------|
+| :------------------------------- | :----- |
 | /centreon/autodiscovery/services | `POST` |
 
 #### Headers
 
 | Header       | Value            |
-|:-------------|:-----------------|
+| :----------- | :--------------- |
 | Accept       | application/json |
 | Content-Type | application/json |
 
 #### Body
 
-| Key                  | Value | Description                                                                   |
-|:---------------------|:------|:------------------------------------------------------------------------------|
-| filter\_rules        | array | Run the selected rule of discovery                                            |
-| force\_rule          | `1|0` | Run also disabled rules                                                       |
-| filter\_hosts        | array | Run all discovery rules linked to all templates of host used by selected host |
-| filter\_pollers      | array | Run all discovery rules linked to all poller linked with rule                 |
-| manual               | `1|0` | Run discovery for manual scan                                                 |
-| dry\_run             | `1|0` | Run discovery without configuration change                                    |
-| no\_generate\_config | `1|0` | No configuration generation (even if there is some changes)                   |
+| Key                  | Value                                                                                             |
+| :------------------- | :------------------------------------------------------------------------------------------------ |
+| filter\_rules        | Array of rules to use for discovery (empty means all)                                             |
+| force\_rule          | Run disabled rules ('0': not forced, '1': forced)                                                 |
+| filter\_hosts        | Array of hosts against which run the discovery (empty means all)                                  |
+| filter\_pollers      | Array of pollers for which linked hosts will be discovered against (empty means all)              |
+| manual               | Run discovery for manual scan from web UI ('0': automatic, '1': manual)                           |
+| dry\_run             | Run discovery without configuration change ('0': changes, '1': dry run)                           |
+| no\_generate\_config | No configuration generation (even if there is some changes) ('0': generation, '1': no generation) |
 
 ```json
 {

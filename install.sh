@@ -252,7 +252,7 @@ change_environment_file_path
 ## Copy the files in destination folders and modify rights
 copy_and_modify_rights "$BASE_DIR/config/systemd" "gorgoned-service" "$SYSTEM_D" "gorgoned.service" "664"
 copy_and_modify_rights "$BASE_DIR/config/systemd" "gorgoned-sysconfig" "$SYSCONFIG" "gorgoned" "664"
-copy_and_modify_rights "$BASE_DIR/config/logrotate" "gorgoned" "$LOGROTATE_D" "gorgoned" "775"
+copy_and_modify_rights "$BASE_DIR/config/logrotate" "gorgoned" "$LOGROTATE_D" "gorgoned" "644"
 copy_and_modify_rights "$BASE_DIR/packaging" "config.yaml" "$GORGONE_ETC" "config.yaml" "755"
 copy_and_modify_rights "$BASE_DIR" "gorgoned" "$GORGONE_BINDIR" "gorgoned" "755"
 copy_and_modify_rights "$BASE_DIR/contrib" "gorgone_config_init.pl" "$GORGONE_BINDIR" "gorgone_config_init.pl" "775"

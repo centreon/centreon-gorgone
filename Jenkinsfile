@@ -15,7 +15,7 @@ if (env.BRANCH_NAME.startsWith('release-')) {
 /*
 ** Pipeline code.
 */
-stage('Source') {
+stage('Sonar analysis') {
   node {
     sh 'setup_centreon_build.sh'
     dir('centreon-gorgone') {

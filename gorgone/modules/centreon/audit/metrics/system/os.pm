@@ -28,28 +28,8 @@ sub metrics {
 
     my $metrics = {
         status_code => 0,
-        status_message => 'ok',
-        avg_1min => 'n/a',
-        avg_5min => 'n/a',
-        avg_15min => 'n/a',
-        avg_60min => 'n/a'
+        status_message => 'ok'
     };
-    if ($options{sampling}->{cpu}->{status_code} != 0) {
-        $metrics->{status_code} = $options{sampling}->{cpu}->{status_code};
-        $metrics->{status_message} = $options{sampling}->{cpu}->{status_message};
-        return $metrics;
-    }
-
-    foreach (([1, 'avg_1min'], [4, 'avg_5min'], [14, 'avg_15min'], [59, 'avg_60min'])) {
-        next if (!defined($options{sampling}->{cpu}->{values}->[ $_->[0] ]));
-        $metrics->{ $_->[1] } = sprintf(
-            '%.2f',
-            100 - (
-                100 * ($options{sampling}->{cpu}->{values}->[0]->[1] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[1])
-                / ($options{sampling}->{cpu}->{values}->[0]->[0] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[0])
-            )
-        );
-    }
 
     return $metrics;
 }

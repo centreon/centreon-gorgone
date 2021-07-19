@@ -143,8 +143,6 @@ sub action_centreonauditnode {
 sub action_centreonauditnodelistener {
     my ($self, %options) = @_;
 
-    use Data::Dumper; print Data::Dumper::Dumper($options{data});
-
     return 0 if (!defined($options{token}) || $options{token} !~ /^audit-(.*?)-(.*)$/);
     my ($audit_token, $audit_node) = ($1, $2);
 
@@ -159,10 +157,27 @@ sub action_centreonauditnodelistener {
         $self->{logger}->writeLogDebug("[audit] audit node listener - node '" . $audit_node . "' ok");
         $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_code} = 0;
         $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_message} = 'ok';
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{metrics} = $options{data}->{data}->{metrics};
     } else {
         return 0;
     }
     $self->{audit_tokens}->{ $audit_token }->{done_nodes}++;
+
+    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token });
+
+    if ($self->{audit_tokens}->{ $audit_token }->{done_nodes} == $self->{audit_tokens}->{ $audit_token }->{count_nodes}) {
+        $self->send_log(
+            code => GORGONE_ACTION_FINISH_OK,
+            token => $audit_token,
+            instant => 1,
+            data => {
+                message => 'finished',
+                audit => $self->{audit_tokens}->{ $audit_token }
+            }
+        );
+        delete $self->{audit_tokens}->{ $audit_token };
+        return 1;
+    }
 
     my $progress = $self->{audit_tokens}->{ $audit_token }->{done_nodes} * 100 / $self->{audit_tokens}->{ $audit_token }->{count_nodes};
     my $div = int(int($progress) / 5);
@@ -177,8 +192,6 @@ sub action_centreonauditnodelistener {
             }
         );
     }
-
-    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token });
 
     return 1;
 }

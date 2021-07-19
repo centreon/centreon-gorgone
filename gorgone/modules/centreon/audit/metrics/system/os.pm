@@ -27,9 +27,48 @@ sub metrics {
     my (%options) = @_;
 
     my $metrics = {
-        status_code => 0,
-        status_message => 'ok'
+        os => {
+            status_code => 0,
+            status_message => 'ok',
+            value => 'n/a',
+        },
+        kernel => {
+            status_code => 0,
+            status_message => 'ok',
+            value => 'n/a',
+        }
     };
+
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'lsb_release -a',
+        timeout => 5,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $options{logger}
+    );
+    if ($error != 0) {
+        $metrics->{os}->{status_code} = 1;
+        $metrics->{os}->{status_message} = $stdout;
+    } elsif ($stdout !~ /^Description:\s+(.*)$/mi) {
+        $metrics->{os}->{status_code} = 1;
+        $metrics->{os}->{status_message} = 'cannot find information';
+    } else {
+        $metrics->{os}->{value} = $1;
+    }
+
+    ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'uname -a',
+        timeout => 5,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $options{logger}
+    );
+    if ($error != 0) {
+        $metrics->{kernel}->{status_code} = 1;
+        $metrics->{kernel}->{status_message} = $stdout;
+    } else {
+        $metrics->{kernel}->{value} = $stdout;
+    }
 
     return $metrics;
 }

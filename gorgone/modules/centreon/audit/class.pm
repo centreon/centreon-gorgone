@@ -123,9 +123,10 @@ sub action_centreonauditnode {
     $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action node starting' });
 
     my $metrics = {};
-    foreach (keys %{$self->{metrics_modules}}) {
-        $metrics->{$_} = $self->{metrics_modules}->{$_}->(
-            sampling => $self->{sampling}
+    foreach my $name (keys %{$self->{metrics_modules}}) {
+        $metrics->{$name} = $self->{metrics_modules}->{$name}->(
+            sampling => $self->{sampling},
+            logger => $self->{logger}
         );
     }
 

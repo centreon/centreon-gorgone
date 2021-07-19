@@ -34,12 +34,22 @@ use ZMQ::Constants qw(:all);
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
+my @sampling_modules = (
+    'system::cpu'
+);
+my @metrics_modules = (
+    'system::cpu'
+);
+
 sub new {
     my ($class, %options) = @_;
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
     $connector->{audit_tokens} = {};
+    $connector->{sampling} = {};
+    $connector->{sampling_modules} = {};
+    $connector->{metrics_modules} = {};
 
     $connector->set_signal_handlers();
     return $connector;
@@ -77,6 +87,32 @@ sub class_handle_HUP {
     }
 }
 
+sub load_modules {
+    my ($self, %options) = @_;
+
+    foreach (@sampling_modules) {
+        my $mod_name = 'gorgone::modules::centreon::audit::sampling::' . $_;
+        my $ret = gorgone::standard::misc::mymodule_load(
+            logger => $self->{logger},
+            module => $mod_name,
+            error_msg => "Cannot load sampling module '$_'"
+        );
+        next if ($ret == 1);
+        $self->{sampling_modules}->{$_} = $mod_name->can('sample');
+    }
+
+    foreach (@metrics_modules) {
+        my $mod_name = 'gorgone::modules::centreon::audit::metrics::' . $_;
+        my $ret = gorgone::standard::misc::mymodule_load(
+            logger => $self->{logger},
+            module => $mod_name,
+            error_msg => "Cannot load metrics module '$_'"
+        );
+        next if ($ret == 1);
+        $self->{metrics_modules}->{$_} = $mod_name->can('metrics');
+    }
+}
+
 sub action_centreonauditnode {
     my ($self, %options) = @_;
 
@@ -99,23 +135,37 @@ sub action_centreonauditnodelistener {
     my ($self, %options) = @_;
 
     use Data::Dumper; print Data::Dumper::Dumper($options{data});
-    print Data::Dumper::Dumper($options{token} . "===");
 
     return 0 if (!defined($options{token}) || $options{token} !~ /^audit-(.*?)-(.*)$/);
     my ($audit_token, $audit_node) = ($1, $2);
 
-    return 0 if (!defined($self->{audit_tokens}->{ $audit_token }) || !defined($self->{audit_tokens}->{ $audit_token }->{ $audit_node }));
+    return 0 if (!defined($self->{audit_tokens}->{ $audit_token }) || !defined($self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }));
 
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
         $self->{logger}->writeLogError("[audit] audit node listener - node '" . $audit_node . "' error");
-        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{status} = 'error';
-        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{message_error} = $options{data}->{data}->{message};
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status} = 'error';
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{message_error} = $options{data}->{data}->{message};
     } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
         $self->{logger}->writeLogDebug("[audit] audit node listener - node '" . $audit_node . "' ok");
-        $self->{audit_tokens}->{ $audit_token }->{ $audit_node }->{status} = 'ok';
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status} = 'ok';
+    }
+    $self->{audit_tokens}->{ $audit_token }->{done_nodes}++;
+
+    my $progress = $self->{audit_tokens}->{ $audit_token }->{done_nodes} * 100 / $self->{audit_tokens}->{ $audit_token }->{count_nodes};
+    my $div = int(int($progress) / 5);
+    if (int($progress) % 3 == 0) {
+        $self->send_log(
+            code => GORGONE_MODULE_CENTREON_AUDIT_PROGRESS,
+            token => $audit_token,
+            instant => 1,
+            data => {
+                message => 'current progress',
+                complete => sprintf('%.2f', $progress) 
+            }
+        );
     }
 
-    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token }->{ $audit_node });
+    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token });
 
     return 1;
 }
@@ -137,7 +187,12 @@ sub action_centreonauditschedule {
         return 1;
     }
 
-    $self->{audit_tokens}->{ $options{token} } = {};
+    $self->{audit_tokens}->{ $options{token} } = {
+        started => time(),
+        count_nodes => 0,
+        done_nodes => 0,
+        nodes => {}
+    };
     foreach (@$datas) {
         $self->send_internal_action(
             action => 'ADDLISTENER',
@@ -160,11 +215,12 @@ sub action_centreonauditschedule {
             }
         );
 
-        $self->{audit_tokens}->{ $options{token} }->{ $_->[0] } = {
+        $self->{audit_tokens}->{ $options{token} }->{nodes}->{$_->[0]} = {
             name => $_->[1],
             status => 'wip',
             message_error => '-'
         };
+        $self->{audit_tokens}->{ $options{token} }->{count_nodes}++;
     }
 
     return 0;
@@ -190,7 +246,13 @@ sub event {
 sub sampling {
     my ($self, %options) = @_;
 
+    return if (defined($self->{sampling_last}) && (time() - $self->{sampling_last}) < 60);
     $self->{logger}->writeLogDebug('[audit] sampling starting');
+    foreach (keys %{$self->{sampling_modules}}) {
+        $self->{sampling_modules}->{$_}->(sampling => $self->{sampling});
+    }
+
+    $self->{sampling_last} = time();
 }
 
 sub run {
@@ -217,6 +279,8 @@ sub run {
         logger => $self->{logger}
     );
     $self->{class_object} = gorgone::class::sqlquery->new(logger => $self->{logger}, db_centreon => $self->{db_centreon});
+
+    $self->load_modules();
 
     $self->{poll} = [
         {

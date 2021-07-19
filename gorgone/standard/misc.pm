@@ -254,4 +254,23 @@ sub trim {
     return $value;
 }
 
+sub slurp {
+    my (%options) = @_;
+
+    my ($fh, $size);
+    if (!open($fh, '<', $options{file})) {
+        return (0, "Could not open $options{file}: $!");
+    }
+    if (!($size = -s $options{file})) {
+        return (0, "File $options{file} appears to be empty");
+    }
+    binmode $fh;
+    read($fh, my $buffer, $size);
+    close $fh;
+    if (length($buffer) != $size) {
+        return (0, "Could not read entire file contents of $options{file}");
+    }
+    return (1, 'ok', $buffer);
+}
+
 1;

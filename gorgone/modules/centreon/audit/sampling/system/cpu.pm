@@ -50,6 +50,11 @@ sub sample {
         return ;
     }
 
+    $options{sampling}->{cpu}->{num_cpu} = 0;
+    while ($buffer =~ /^cpu(\d+)/mg) {
+        $options{sampling}->{cpu}->{num_cpu}++;
+    }
+
     unshift @{$options{sampling}->{cpu}->{values}}, [
         $1 + $2 + $3 + $4 + $5 + $6 + $7,
         $4

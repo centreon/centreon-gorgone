@@ -29,6 +29,7 @@ sub metrics {
     my $metrics = {
         status_code => 0,
         status_message => 'ok',
+        num_cpu => 0,
         avg_1min => 'n/a',
         avg_5min => 'n/a',
         avg_15min => 'n/a',
@@ -40,6 +41,7 @@ sub metrics {
         return $metrics;
     }
 
+    $metrics->{num_cpu} = $options{sampling}->{cpu}->{num_cpu};
     foreach (([1, 'avg_1min'], [4, 'avg_5min'], [14, 'avg_15min'], [59, 'avg_60min'])) {
         next if (!defined($options{sampling}->{cpu}->{values}->[ $_->[0] ]));
         $metrics->{ $_->[1] } = sprintf(

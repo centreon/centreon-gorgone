@@ -29,7 +29,8 @@ sub sample {
 
     if (!defined($options{sampling}->{cpu})) {
         $options{sampling}->{cpu} = {
-            status => 'ok',
+            status_code => 0,
+            status_message => 'ok',
             round => 0,
             values => []
         };
@@ -38,21 +39,23 @@ sub sample {
     $options{sampling}->{cpu}->{round}++;
     my ($ret, $message, $buffer) = gorgone::standard::misc::slurp(file => '/proc/stat');
     if ($ret == 0) {
-        $options{sampling}->{cpu}->{status} = $message;
+        $options{sampling}->{cpu}->{status_code} = 1;
+        $options{sampling}->{cpu}->{status_message} = $message;
         return ;
     }
 
     if ($buffer !~ /^cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/) {
-        $options{sampling}->{cpu}->{status} = 'cannot find cpu information';
+        $options{sampling}->{cpu}->{status_code} = 1;
+        $options{sampling}->{cpu}->{status_message} = 'cannot find cpu information';
         return ;
     }
 
-    push @{$options{sampling}->{cpu}->{values}}, [
+    unshift @{$options{sampling}->{cpu}->{values}}, [
         $1 + $2 + $3 + $4 + $5 + $6 + $7,
         $4
     ];
     if (scalar(@{$options{sampling}->{cpu}->{values}}) > 60) {
-        shift @{$options{sampling}->{cpu}->{values}};
+        pop @{$options{sampling}->{cpu}->{values}};
     }
 }
 

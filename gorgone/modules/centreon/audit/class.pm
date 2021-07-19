@@ -38,7 +38,8 @@ my @sampling_modules = (
     'system::cpu'
 );
 my @metrics_modules = (
-    'system::cpu'
+    'system::cpu',
+    'system::os'
 );
 
 sub new {
@@ -121,12 +122,20 @@ sub action_centreonauditnode {
 
     $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action node starting' });
 
-    # je check la
+    my $metrics = {};
+    foreach (keys %{$self->{metrics_modules}}) {
+        $metrics->{$_} = $self->{metrics_modules}->{$_}->(
+            sampling => $self->{sampling}
+        );
+    }
 
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
         token => $options{token},
-        data => { message => 'action node finished' }
+        data => {
+            message => 'action node finished',
+            metrics => $metrics
+        }
     );
     $self->{logger}->writeLogDebug('[audit] action node finished');
 }
@@ -143,11 +152,15 @@ sub action_centreonauditnodelistener {
 
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
         $self->{logger}->writeLogError("[audit] audit node listener - node '" . $audit_node . "' error");
-        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status} = 'error';
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_code} = 2;
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_message} = 'error';
         $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{message_error} = $options{data}->{data}->{message};
     } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
         $self->{logger}->writeLogDebug("[audit] audit node listener - node '" . $audit_node . "' ok");
-        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status} = 'ok';
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_code} = 0;
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_message} = 'ok';
+    } else {
+        return 0;
     }
     $self->{audit_tokens}->{ $audit_token }->{done_nodes}++;
 
@@ -217,7 +230,8 @@ sub action_centreonauditschedule {
 
         $self->{audit_tokens}->{ $options{token} }->{nodes}->{$_->[0]} = {
             name => $_->[1],
-            status => 'wip',
+            status_code => 1,
+            status_message => 'wip',
             message_error => '-'
         };
         $self->{audit_tokens}->{ $options{token} }->{count_nodes}++;

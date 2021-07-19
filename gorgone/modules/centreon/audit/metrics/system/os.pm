@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package gorgone::modules::centreon::audit::metrics::system::cpu;
+package gorgone::modules::centreon::audit::metrics::system::os;
 
 use warnings;
 use strict;

@@ -38,6 +38,7 @@ my @sampling_modules = (
     'system::cpu'
 );
 my @metrics_modules = (
+    'centreon::realtime',
     'system::cpu',
     'system::os'
 );
@@ -124,10 +125,14 @@ sub action_centreonauditnode {
 
     my $metrics = {};
     foreach my $name (keys %{$self->{metrics_modules}}) {
-        $metrics->{$name} = $self->{metrics_modules}->{$name}->(
+        my $result = $self->{metrics_modules}->{$name}->(
+            centreon_sqlquery => $self->{centreon_sqlquery},
+            centstorage_sqlquery => $self->{centstorage_sqlquery},
             sampling => $self->{sampling},
             logger => $self->{logger}
         );
+        next if (!defined($result));
+        $metrics->{$name} = $result;
     }
 
     $self->send_log(
@@ -152,8 +157,7 @@ sub action_centreonauditnodelistener {
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
         $self->{logger}->writeLogError("[audit] audit node listener - node '" . $audit_node . "' error");
         $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_code} = 2;
-        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_message} = 'error';
-        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{message_error} = $options{data}->{data}->{message};
+        $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_message} = $options{data}->{data}->{message};
     } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
         $self->{logger}->writeLogDebug("[audit] audit node listener - node '" . $audit_node . "' ok");
         $self->{audit_tokens}->{ $audit_token }->{nodes}->{ $audit_node }->{status_code} = 0;
@@ -204,7 +208,7 @@ sub action_centreonauditschedule {
     $options{token} = $self->generate_token() if (!defined($options{token}));
     $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action schedule proceed' });
 
-    my ($status, $datas) = $self->{class_object}->custom_execute(
+    my ($status, $datas) = $self->{centreon_sqlquery}->custom_execute(
         request => "SELECT id, name FROM nagios_server WHERE ns_activate = '1'",
         mode => 2
     );
@@ -245,8 +249,7 @@ sub action_centreonauditschedule {
         $self->{audit_tokens}->{ $options{token} }->{nodes}->{$_->[0]} = {
             name => $_->[1],
             status_code => 1,
-            status_message => 'wip',
-            message_error => '-'
+            status_message => 'wip'
         };
         $self->{audit_tokens}->{ $options{token} }->{count_nodes}++;
     }
@@ -299,14 +302,27 @@ sub run {
         data => {}
     );
 
-    $self->{db_centreon} = gorgone::class::db->new(
-        dsn => $self->{config_db_centreon}->{dsn},
-        user => $self->{config_db_centreon}->{username},
-        password => $self->{config_db_centreon}->{password},
-        force => 0,
-        logger => $self->{logger}
-    );
-    $self->{class_object} = gorgone::class::sqlquery->new(logger => $self->{logger}, db_centreon => $self->{db_centreon});
+    if (defined($self->{config_db_centreon})) {
+        $self->{db_centreon} = gorgone::class::db->new(
+            dsn => $self->{config_db_centreon}->{dsn},
+            user => $self->{config_db_centreon}->{username},
+            password => $self->{config_db_centreon}->{password},
+            force => 0,
+            logger => $self->{logger}
+        );
+        $self->{centreon_sqlquery} = gorgone::class::sqlquery->new(logger => $self->{logger}, db_centreon => $self->{db_centreon});
+    }
+
+    if (defined($self->{config_db_centstorage})) {
+        $self->{db_centstorage} = gorgone::class::db->new(
+            dsn => $self->{config_db_centstorage}->{dsn},
+            user => $self->{config_db_centstorage}->{username},
+            password => $self->{config_db_centstorage}->{password},
+            force => 0,
+            logger => $self->{logger}
+        );
+        $self->{centstorage_sqlquery} = gorgone::class::sqlquery->new(logger => $self->{logger}, db_centreon => $self->{db_centstorage});
+    }
 
     $self->load_modules();
 

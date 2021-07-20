@@ -41,6 +41,7 @@ my @sampling_modules = (
 my @metrics_modules = (
     'centreon::database',
     'centreon::packages',
+    'centreon::pluginpacks',
     'centreon::realtime',
     'centreon::rrd',
     'system::cpu',

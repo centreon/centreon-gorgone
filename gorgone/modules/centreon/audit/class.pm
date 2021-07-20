@@ -38,6 +38,7 @@ my @sampling_modules = (
     'system::cpu'
 );
 my @metrics_modules = (
+    'centreon::packages',
     'centreon::realtime',
     'system::cpu',
     'system::os'
@@ -126,6 +127,7 @@ sub action_centreonauditnode {
     my $metrics = {};
     foreach my $name (keys %{$self->{metrics_modules}}) {
         my $result = $self->{metrics_modules}->{$name}->(
+            os => $self->{os},
             centreon_sqlquery => $self->{centreon_sqlquery},
             centstorage_sqlquery => $self->{centstorage_sqlquery},
             sampling => $self->{sampling},
@@ -167,8 +169,6 @@ sub action_centreonauditnodelistener {
         return 0;
     }
     $self->{audit_tokens}->{ $audit_token }->{done_nodes}++;
-
-    print Data::Dumper::Dumper($self->{audit_tokens}->{ $audit_token });
 
     if ($self->{audit_tokens}->{ $audit_token }->{done_nodes} == $self->{audit_tokens}->{ $audit_token }->{count_nodes}) {
         $self->send_log(
@@ -286,6 +286,22 @@ sub sampling {
     $self->{sampling_last} = time();
 }
 
+sub get_system {
+    my ($self, %options) = @_;
+
+    $self->{os} = 'unknown';
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'lsb_release -a',
+        timeout => 5,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $options{logger}
+    );
+    if ($error == 0 && $stdout =~ /^Description:\s+(.*)$/mi) {
+        $self->{os} = $1;
+    }
+}
+
 sub run {
     my ($self, %options) = @_;
 
@@ -325,6 +341,7 @@ sub run {
     }
 
     $self->load_modules();
+    $self->get_system();
 
     $self->{poll} = [
         {

@@ -22,6 +22,7 @@ package gorgone::modules::centreon::audit::metrics::centreon::rrd;
 
 use warnings;
 use strict;
+use gorgone::standard::misc;
 
 sub metrics {
     my (%options) = @_;
@@ -49,10 +50,13 @@ sub metrics {
             next if ($file !~ /\.rrd/);
             $metrics->{'rrd_' . $type . '_count'}++;
             my $size = -s $options{params}->{'rrd_' . $type . '_path'} . '/' . $file;
-            $metrics->{'rrd_' . $type . '_count'} += $size if ($size);
+            $metrics->{'rrd_' . $type . '_bytes'} += $size if ($size);
         }
         closedir($dh);
     }
+
+    $metrics->{rrd_metrics_human} = join('', gorgone::standard::misc::scale(value => $metrics->{rrd_metrics_bytes}, format => '%.2f'));
+    $metrics->{rrd_status_human} = join('', gorgone::standard::misc::scale(value => $metrics->{rrd_status_bytes}, format => '%.2f'));
 
     return $metrics;
 }

@@ -38,6 +38,7 @@ my @sampling_modules = (
     'system::cpu'
 );
 my @metrics_modules = (
+    'centreon::database',
     'centreon::packages',
     'centreon::realtime',
     'centreon::rrd',

@@ -40,6 +40,7 @@ my @sampling_modules = (
 my @metrics_modules = (
     'centreon::packages',
     'centreon::realtime',
+    'centreon::rrd',
     'system::cpu',
     'system::os'
 );
@@ -131,6 +132,7 @@ sub action_centreonauditnode {
             centreon_sqlquery => $self->{centreon_sqlquery},
             centstorage_sqlquery => $self->{centstorage_sqlquery},
             sampling => $self->{sampling},
+            params => $options{data}->{content},
             logger => $self->{logger}
         );
         next if (!defined($result));
@@ -208,7 +210,21 @@ sub action_centreonauditschedule {
     $options{token} = $self->generate_token() if (!defined($options{token}));
     $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action schedule proceed' });
 
-    my ($status, $datas) = $self->{centreon_sqlquery}->custom_execute(
+    my $params = {};
+    
+    my ($status, $datas) = $self->{centstorage_sqlquery}->custom_execute(
+        request => 'SELECT RRDdatabase_path, RRDdatabase_status_path FROM config',
+        mode => 2
+    );
+    if ($status == -1) {
+        $self->send_log(code => GORGONE_ACTION_FINISH_KO, token => $options{token}, data => { message => 'cannot find centstorage config' });
+        $self->{logger}->writeLogError('[audit] Cannot find centstorage configuration');
+        return 1;
+    }
+    $params->{rrd_metrics_path} = $datas->[0]->[0];
+    $params->{rrd_status_path} = $datas->[0]->[1];
+
+    ($status, $datas) = $self->{centreon_sqlquery}->custom_execute(
         request => "SELECT id, name FROM nagios_server WHERE ns_activate = '1'",
         mode => 2
     );
@@ -242,7 +258,7 @@ sub action_centreonauditschedule {
             token => 'audit-' . $options{token} . '-' . $_->[0],
             data => {
                 instant => 1,
-                content => {}
+                content => $params
             }
         );
 

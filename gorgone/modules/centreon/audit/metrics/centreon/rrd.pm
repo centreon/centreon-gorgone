@@ -36,9 +36,12 @@ sub metrics {
         rrd_metrics_count => 0,
         rrd_status_count => 0,
         rrd_metrics_bytes => 0,
-        rrd_status_bytes => 0
+        rrd_status_bytes => 0,
+        rrd_metrics_outdated => 0,
+        rrd_status_outdated => 0
     };
 
+    my $outdated_time = time() - (180 * 86400);
     my $dh;
     foreach my $type (('metrics', 'status')) {
         if (!opendir($dh, $options{params}->{'rrd_' . $type . '_path'})) {
@@ -49,8 +52,9 @@ sub metrics {
         while (my $file = readdir($dh)) {
             next if ($file !~ /\.rrd/);
             $metrics->{'rrd_' . $type . '_count'}++;
-            my $size = -s $options{params}->{'rrd_' . $type . '_path'} . '/' . $file;
-            $metrics->{'rrd_' . $type . '_bytes'} += $size if ($size);
+            my @attrs = stat($options{params}->{'rrd_' . $type . '_path'} . '/' . $file);
+            $metrics->{'rrd_' . $type . '_bytes'} += $attrs[7] if (defined($attrs[7]));
+            $metrics->{'rrd_' . $type . '_outdated'}++ if ($attrs[9] < $outdated_time);
         }
         closedir($dh);
     }

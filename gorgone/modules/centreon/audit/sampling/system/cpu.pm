@@ -57,7 +57,8 @@ sub sample {
 
     unshift @{$options{sampling}->{cpu}->{values}}, [
         $1 + $2 + $3 + $4 + $5 + $6 + $7,
-        $4
+        $4,
+        $5
     ];
     if (scalar(@{$options{sampling}->{cpu}->{values}}) > 60) {
         pop @{$options{sampling}->{cpu}->{values}};

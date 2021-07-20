@@ -31,8 +31,11 @@ sub metrics {
     my $metrics = {
         status_code => 0,
         status_message => 'ok',
-        num_hosts => 0,
-        num_services => 0
+        hosts_count => 0,
+        services_count => 0,
+        hostgroups_count => 0,
+        servicegroups_count => 0,
+        acl_count => 0 
     };
 
     my ($status, $datas) = $options{centstorage_sqlquery}->custom_execute(
@@ -44,7 +47,7 @@ sub metrics {
         $metrics->{status_message} = 'cannot get number of services';
         return $metrics;
     }
-    $metrics->{num_services} = $datas->[0]->[0];
+    $metrics->{services_count} = $datas->[0]->[0];
 
     ($status, $datas) = $options{centstorage_sqlquery}->custom_execute(
         request => "SELECT count(*) FROM instances, hosts WHERE instances.running = '1' AND hosts.instance_id = instances.instance_id AND hosts.enabled = '1'",
@@ -55,7 +58,40 @@ sub metrics {
         $metrics->{status_message} = 'cannot get number of hosts';
         return $metrics;
     }
-    $metrics->{num_hosts} = $datas->[0]->[0];
+    $metrics->{hosts_count} = $datas->[0]->[0];
+
+    ($status, $datas) = $options{centstorage_sqlquery}->custom_execute(
+        request => 'SELECT count(*) FROM hostgroups',
+        mode => 2
+    );
+    if ($status == -1 || !defined($datas->[0])) {
+        $metrics->{status_code} = 1;
+        $metrics->{status_message} = 'cannot get number of hostgroups';
+        return $metrics;
+    }
+    $metrics->{hostgroups_count} = $datas->[0]->[0];
+
+    ($status, $datas) = $options{centstorage_sqlquery}->custom_execute(
+        request => 'SELECT count(*) FROM servicegroups',
+        mode => 2
+    );
+    if ($status == -1 || !defined($datas->[0])) {
+        $metrics->{status_code} = 1;
+        $metrics->{status_message} = 'cannot get number of servicegroups';
+        return $metrics;
+    }
+    $metrics->{servicegroups_count} = $datas->[0]->[0];
+
+    ($status, $datas) = $options{centstorage_sqlquery}->custom_execute(
+        request => 'SELECT count(*) FROM centreon_acl',
+        mode => 2
+    );
+    if ($status == -1 || !defined($datas->[0])) {
+        $metrics->{status_code} = 1;
+        $metrics->{status_message} = 'cannot get number of acl';
+        return $metrics;
+    }
+    $metrics->{acl_count} = $datas->[0]->[0];
 
     return $metrics;
 }

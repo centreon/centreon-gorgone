@@ -30,10 +30,14 @@ sub metrics {
         status_code => 0,
         status_message => 'ok',
         num_cpu => 0,
-        avg_1min => 'n/a',
-        avg_5min => 'n/a',
-        avg_15min => 'n/a',
-        avg_60min => 'n/a'
+        avg_used_1min => 'n/a',
+        avg_used_5min => 'n/a',
+        avg_used_15min => 'n/a',
+        avg_used_60min => 'n/a',
+        avg_iowait_1min => 'n/a',
+        avg_iowait_5min => 'n/a',
+        avg_iowait_15min => 'n/a',
+        avg_iowait_60min => 'n/a'
     };
     if ($options{sampling}->{cpu}->{status_code} != 0) {
         $metrics->{status_code} = $options{sampling}->{cpu}->{status_code};
@@ -42,14 +46,19 @@ sub metrics {
     }
 
     $metrics->{num_cpu} = $options{sampling}->{cpu}->{num_cpu};
-    foreach (([1, 'avg_1min'], [4, 'avg_5min'], [14, 'avg_15min'], [59, 'avg_60min'])) {
+    foreach (([1, '1min'], [4, '5min'], [14, '15min'], [59, '60min'])) {
         next if (!defined($options{sampling}->{cpu}->{values}->[ $_->[0] ]));
-        $metrics->{ $_->[1] } = sprintf(
+        $metrics->{ 'avg_used_' . $_->[1] } = sprintf(
             '%.2f',
             100 - (
                 100 * ($options{sampling}->{cpu}->{values}->[0]->[1] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[1])
                 / ($options{sampling}->{cpu}->{values}->[0]->[0] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[0])
             )
+        );
+        $metrics->{ 'avg_iowait_' . $_->[1] } = sprintf(
+            '%.2f',
+                100 * ($options{sampling}->{cpu}->{values}->[0]->[2] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[2])
+                / ($options{sampling}->{cpu}->{values}->[0]->[0] - $options{sampling}->{cpu}->{values}->[ $_->[0] ]->[0])
         );
     }
 

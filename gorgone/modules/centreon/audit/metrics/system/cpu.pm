@@ -29,15 +29,7 @@ sub metrics {
     my $metrics = {
         status_code => 0,
         status_message => 'ok',
-        num_cpu => 0,
-        avg_used_1min => 'n/a',
-        avg_used_5min => 'n/a',
-        avg_used_15min => 'n/a',
-        avg_used_60min => 'n/a',
-        avg_iowait_1min => 'n/a',
-        avg_iowait_5min => 'n/a',
-        avg_iowait_15min => 'n/a',
-        avg_iowait_60min => 'n/a'
+        num_cpu => 0
     };
     if ($options{sampling}->{cpu}->{status_code} != 0) {
         $metrics->{status_code} = $options{sampling}->{cpu}->{status_code};
@@ -47,6 +39,8 @@ sub metrics {
 
     $metrics->{num_cpu} = $options{sampling}->{cpu}->{num_cpu};
     foreach (([1, '1min'], [4, '5min'], [14, '15min'], [59, '60min'])) {
+        $metrics->{ 'avg_used_' . $_->[1] } = 'n/a';
+        $metrics->{ 'avg_iowait_' . $_->[1] } = 'n/a';
         next if (!defined($options{sampling}->{cpu}->{values}->[ $_->[0] ]));
         $metrics->{ 'avg_used_' . $_->[1] } = sprintf(
             '%.2f',

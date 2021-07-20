@@ -35,7 +35,8 @@ my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
 my @sampling_modules = (
-    'system::cpu'
+    'system::cpu',
+    'system::diskio'
 );
 my @metrics_modules = (
     'centreon::database',
@@ -44,6 +45,7 @@ my @metrics_modules = (
     'centreon::rrd',
     'system::cpu',
     'system::disk',
+    'system::diskio',
     'system::load',
     'system::memory',
     'system::os'

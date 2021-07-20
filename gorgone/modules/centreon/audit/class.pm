@@ -43,6 +43,7 @@ my @metrics_modules = (
     'centreon::rrd',
     'system::cpu',
     'system::disk',
+    'system::memory',
     'system::os'
 );
 

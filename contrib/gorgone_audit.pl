@@ -309,6 +309,58 @@ END_DISK
     return $disk;
 }
 
+sub md_node_system_diskio {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $diskio = "#### Disks I/O\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $diskio .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        return $diskio;
+    }
+
+    $diskio .= <<"END_DISK";
+| Device      | Read IOPs  | Write IOPs   | Read Time  | Write Time  |
+| :---------- | :--------- | :----------- | :--------  | :---------- |
+END_DISK
+
+    foreach my $dev (sort keys %{$options{entry}->{partitions}}) {
+        my $values = $options{entry}->{partitions}->{$dev};
+        $diskio .= "| $dev | " . 
+            sprintf(
+                '%s/%s/%s/%s', 
+                defined($values->{read_iops_1min_human}) && $values->{read_iops_1min_human} =~ /\d/ ? $values->{read_iops_1min_human} : '-',
+                defined($values->{read_iops_5min_human}) && $values->{read_iops_5min_human} =~ /\d/ ? $values->{read_iops_5min_human} : '-',
+                defined($values->{read_iops_15min_human}) && $values->{read_iops_15min_human} =~ /\d/ ? $values->{read_iops_15min_human} : '-',
+                defined($values->{read_iops_60min_human}) && $values->{read_iops_60min_human} =~ /\d/ ? $values->{read_iops_60min_human} : '-',
+            ) . '| ' .
+            sprintf(
+                '%s/%s/%s/%s', 
+                defined($values->{write_iops_1min_human}) && $values->{write_iops_1min_human} =~ /\d/ ? $values->{write_iops_1min_human} : '-',
+                defined($values->{write_iops_5min_human}) && $values->{write_iops_5min_human} =~ /\d/ ? $values->{write_iops_5min_human} : '-',
+                defined($values->{write_iops_15min_human}) && $values->{write_iops_15min_human} =~ /\d/ ? $values->{write_iops_15min_human} : '-',
+                defined($values->{write_iops_60min_human}) && $values->{write_iops_60min_human} =~ /\d/ ? $values->{write_iops_60min_human} : '-',
+            ) . '| ' .
+            sprintf(
+                '%s/%s/%s/%s', 
+                defined($values->{read_time_1min_ms}) && $values->{read_time_1min_ms} =~ /\d/ ? $values->{read_time_1min_ms} . 'ms' : '-',
+                defined($values->{read_time_5min_ms}) && $values->{read_time_5min_ms} =~ /\d/ ? $values->{read_time_5min_ms} . 'ms' : '-',
+                defined($values->{read_time_15min_ms}) && $values->{read_time_15min_ms} =~ /\d/ ? $values->{read_time_15min_ms} . 'ms' : '-',
+                defined($values->{read_time_60min_ms}) && $values->{read_time_60min_ms} =~ /\d/ ? $values->{read_time_60min_ms} . 'ms' : '-'
+            ) . '| ' .
+            sprintf(
+                '%s/%s/%s/%s', 
+                defined($values->{write_time_1min_ms}) && $values->{write_time_1min_ms} =~ /\d/ ? $values->{write_time_1min_ms} . 'ms' : '-',
+                defined($values->{write_time_5min_ms}) && $values->{write_time_5min_ms} =~ /\d/ ? $values->{write_time_5min_ms} . 'ms' : '-',
+                defined($values->{write_time_15min_ms}) && $values->{write_time_15min_ms} =~ /\d/ ? $values->{write_time_15min_ms} . 'ms' : '-',
+                defined($values->{write_time_60min_ms}) && $values->{write_time_60min_ms} =~ /\d/ ? $values->{write_time_60min_ms} . 'ms' : '-'
+            ) . "|\n";
+    }
+
+    return $diskio;
+}
+
 sub md_node_system {
     my ($self, %options) = @_;
 
@@ -319,6 +371,7 @@ sub md_node_system {
     my $load = $self->md_node_system_load(entry => $options{node}->{metrics}->{'system::load'});
     my $memory = $self->md_node_system_memory(entry => $options{node}->{metrics}->{'system::memory'});
     my $disks = $self->md_node_system_disk(entry => $options{node}->{metrics}->{'system::disk'});
+    my $disks_io = $self->md_node_system_diskio(entry => $options{node}->{metrics}->{'system::diskio'});
 
     $self->{md_content} .= <<"END_CONTENT";
 ### System
@@ -334,6 +387,7 @@ ${cpu}${load}${memory}
 </table>
 
 $disks
+$disks_io
 
 END_CONTENT
     

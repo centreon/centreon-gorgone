@@ -377,7 +377,6 @@ sub md_node_centreon_packages {
 | :---- | :----   |
 END_PACKAGES
 
-    
     foreach my $entry (sort { $a->[0] cmp $b->[0] } @{$options{entry}->{list}}) {
         $packages .= <<"END_PACKAGES";
 | $entry->[0] | $entry->[1] |
@@ -385,6 +384,28 @@ END_PACKAGES
     }
 
     return $packages;
+}
+
+sub md_node_centreon_realtime {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $realtime = "#### Realtime\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $realtime .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        return $realtime;
+    }
+
+    $realtime .= <<"END_REALTIME";
+number of hosts: $options{entry}->{hosts_count} \\
+number of services: $options{entry}->{services_count} \\
+number of hostgroups: $options{entry}->{hostgroups_count} \\
+number of servicegroups: $options{entry}->{servicegroups_count} \\
+number of acl: $options{entry}->{acl_count}
+END_REALTIME
+
+    return $realtime;
 }
 
 sub md_node_system {
@@ -404,8 +425,7 @@ sub md_node_system {
 
 #### Overall
 
-os: $os
-
+os: $os \\
 kernel: $kernel
 
 <table>
@@ -422,11 +442,13 @@ END_CONTENT
 sub md_node_centreon {
     my ($self, %options) = @_;
 
+    my $realtime = $self->md_node_centreon_realtime(entry => $options{node}->{metrics}->{'centreon::realtime'});
     my $packages = $self->md_node_centreon_packages(entry => $options{node}->{metrics}->{'centreon::packages'});
 
     $self->{md_content} .= <<"END_CONTENT";
 ### Centreon
 
+$realtime
 $packages
 
 END_CONTENT

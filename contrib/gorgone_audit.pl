@@ -30,7 +30,8 @@ sub new {
 
     bless $self, $class;
     $self->add_options(
-        'url:s' => \$self->{url}
+        'url:s'      => \$self->{url},
+        'markdown:s' => \$self->{markdown}
     );
     return $self;
 }
@@ -40,6 +41,7 @@ sub init {
     $self->SUPER::init();
 
     $self->{url} = 'http://127.0.0.1:8085' if (!defined($self->{url}) || $self->{url} eq '');
+    $self->{markdown} = 'audit.md' if (defined($self->{markdown}) && $self->{markdown} eq '');
     $self->{http} = gorgone::class::http::http->new(logger => $self->{logger});
 }
 
@@ -139,7 +141,7 @@ sub get_audit_log {
                 $self->{logger}->writeLogError("audit execution: $data->{message}");
                 $stop = 1;
             } elsif ($_->{code} == 2) {
-                $self->{logger}->writeLogInfo("audit result: " . Data::Dumper::Dumper($data->{audit}));
+                $self->{audit} = $data->{audit};
                 $stop = 1;
             }
         }
@@ -147,6 +149,223 @@ sub get_audit_log {
         last if ($stop == 1);
         sleep(10);
     }
+
+    if (defined($self->{audit})) {
+        $self->{logger}->writeLogInfo("audit result: " . JSON::XS->new->utf8->encode($self->{audit}));
+        if (defined($self->{markdown})) {
+            $self->md_output();
+        }
+    }
+}
+
+sub md_node_system_cpu {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $cpu = <<"END_CPU";
+    <tr>
+         <td colspan="2">Cpu</td>
+    </tr>
+END_CPU
+
+    if ($options{entry}->{status_code} != 0) {
+        my $message = '_**Error:** cannot get informations ' . $options{node}->{status_message}; 
+        $cpu .= <<"END_CPU";
+    <tr>
+         <td colspan="2">$message</td>
+    </tr>
+END_CPU
+        return $cpu;
+    }
+
+    my $used = sprintf(
+        '%s/%s/%s/%s (1m/5m/15m/60m)',
+        defined($options{entry}->{avg_used_1min}) && $options{entry}->{avg_used_1min} =~ /\d/ ? $options{entry}->{avg_used_1min} . '%' : '-',
+        defined($options{entry}->{avg_used_5min}) && $options{entry}->{avg_used_5min} =~ /\d/ ? $options{entry}->{avg_used_5min} . '%' : '-',
+        defined($options{entry}->{avg_used_15min}) && $options{entry}->{avg_used_15min} =~ /\d/ ? $options{entry}->{avg_used_15min} . '%' : '-',
+        defined($options{entry}->{avg_used_60min}) && $options{entry}->{avg_used_60min} =~ /\d/ ? $options{entry}->{avg_used_60min} . '%' : '-'
+    );
+    my $iowait = sprintf(
+        '%s/%s/%s/%s (1m/5m/15m/60m)',
+        defined($options{entry}->{avg_iowait_1min}) && $options{entry}->{avg_iowait_1min} =~ /\d/ ? $options{entry}->{avg_iowait_1min} . '%' : '-',
+        defined($options{entry}->{avg_iowait_5min}) && $options{entry}->{avg_iowait_5min} =~ /\d/ ? $options{entry}->{avg_iowait_5min} . '%' : '-',
+        defined($options{entry}->{avg_iowait_15min}) && $options{entry}->{avg_iowait_15min} =~ /\d/ ? $options{entry}->{avg_iowait_15min} . '%' : '-',
+        defined($options{entry}->{avg_iowait_60min}) && $options{entry}->{avg_iowait_60min} =~ /\d/ ? $options{entry}->{avg_iowait_60min} . '%' : '-'
+    );
+    $cpu .= <<"END_CPU";
+    <tr>
+         <td>number of cores</td>
+         <td>$options{entry}->{num_cpu}</td>
+    </tr>
+    <tr>
+         <td>used</td>
+         <td>$used</td>
+	</tr>
+    <tr>
+         <td>iowait</td>
+         <td>$iowait</td>
+    </tr>
+END_CPU
+
+    return $cpu;
+}
+
+sub md_node_system_load {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $load = <<"END_LOAD";
+    <tr>
+         <td colspan="2">Load</td>
+    </tr>
+END_LOAD
+
+    if ($options{entry}->{status_code} != 0) {
+        my $message = '_**Error:** cannot get informations ' . $options{node}->{status_message}; 
+        $load .= <<"END_LOAD";
+    <tr>
+         <td colspan="2">$message</td>
+    </tr>
+END_LOAD
+        return $load;
+    }
+
+    $load .= <<"END_LOAD";
+    <tr>
+         <td>load average</td>
+         <td>$options{entry}->{load1m}/$options{entry}->{load5m}/$options{entry}->{load15m} (1m/5m/15m)</td>
+    </tr>
+END_LOAD
+    return $load;
+}
+
+sub md_node_system_memory {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $memory = <<"END_MEMORY";
+    <tr>
+         <td colspan="2">Memory</td>
+    </tr>
+END_MEMORY
+
+    if ($options{entry}->{status_code} != 0) {
+        my $message = '_**Error:** cannot get informations ' . $options{node}->{status_message}; 
+        $memory .= <<"END_MEMORY";
+    <tr>
+         <td colspan="2">$message</td>
+    </tr>
+END_MEMORY
+        return $memory;
+    }
+
+    $memory .= <<"END_MEMORY";
+    <tr>
+         <td>memory total</td>
+         <td>$options{entry}->{ram_total_human}</td>
+    </tr>
+    <tr>
+         <td>memory available</td>
+         <td>$options{entry}->{ram_available_human}</td>
+    </tr>
+    <tr>
+         <td>swap total</td>
+         <td>$options{entry}->{swap_total_human}</td>
+    </tr>
+    <tr>
+         <td>swap free</td>
+         <td>$options{entry}->{swap_free_human}</td>
+    </tr>
+END_MEMORY
+    return $memory;
+}
+
+sub md_node_system_disk {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $disk = "#### Filesystems\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $disk .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        return $disk;
+    }
+
+    $disk .= <<"END_DISK";
+| Filesystem  | Type  | Size   | Used  | Avail  | Inodes  | Mounted |
+| :---------- | :---- | :----- | :---  | :----- | :------ | :------ | 
+END_DISK
+
+    foreach my $mount (sort keys %{$options{entry}->{partitions}}) {
+        my $values = $options{entry}->{partitions}->{$mount};
+        $disk .= <<"END_DISK";
+| $values->{filesystem} | $values->{type} | $values->{space_size_human} | $values->{space_used_human} | $values->{space_free_human} | $values->{inodes_used_percent} | $values->{mount} |
+END_DISK
+    }
+
+    return $disk;
+}
+
+sub md_node_system {
+    my ($self, %options) = @_;
+
+    my $os = defined($options{node}->{metrics}->{'system::os'}) ? $options{node}->{metrics}->{'system::os'}->{os}->{value} : '-';
+    my $kernel = defined($options{node}->{metrics}->{'system::os'}) ? $options{node}->{metrics}->{'system::os'}->{kernel}->{value} : '-';
+    
+    my $cpu = $self->md_node_system_cpu(entry => $options{node}->{metrics}->{'system::cpu'});
+    my $load = $self->md_node_system_load(entry => $options{node}->{metrics}->{'system::load'});
+    my $memory = $self->md_node_system_memory(entry => $options{node}->{metrics}->{'system::memory'});
+    my $disks = $self->md_node_system_disk(entry => $options{node}->{metrics}->{'system::disk'});
+
+    $self->{md_content} .= <<"END_CONTENT";
+### System
+
+#### Overall
+
+os: $os
+
+kernel: $kernel
+
+<table>
+${cpu}${load}${memory}
+</table>
+
+$disks
+
+END_CONTENT
+    
+}
+
+sub md_node {
+    my ($self, %options) = @_;
+
+    $self->{md_content} .= "## " . $options{node}->{name} . "\n\n";
+    if ($options{node}->{status_code} != 0) {
+        $self->{md_content} .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
+        return ;
+    }
+
+    $self->md_node_system(%options);
+}
+
+sub md_output {
+    my ($self) = @_;
+
+    if (!open(FH, '>', $self->{markdown})) {
+        $self->{logger}->writeLogError("cannot open file '" . $self->{markdown} . "': $!");
+        exit(1);
+    }
+    $self->{md_content} = "# Audit\n\n";
+
+    foreach my $node_id (sort { $self->{audit}->{nodes}->{$a}->{name} cmp $self->{audit}->{nodes}->{$b}->{name} } keys %{$self->{audit}->{nodes}}) {
+        $self->md_node(node => $self->{audit}->{nodes}->{$node_id});
+    }
+
+    print FH $self->{md_content};
+    close FH;
 }
 
 sub run {
@@ -174,6 +393,10 @@ gorgone_audit.pl [options]
 =item B<--url>
 
 Specify the api url (default: 'http://127.0.0.1:8085').
+
+=item B<--markdown>
+
+Markdown output format (default: 'audit.md').
 
 =item B<--severity>
 

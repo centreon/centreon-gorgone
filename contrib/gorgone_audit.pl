@@ -320,10 +320,10 @@ sub md_node_system_diskio {
         return $diskio;
     }
 
-    $diskio .= <<"END_DISK";
+    $diskio .= <<"END_DISKIO";
 | Device      | Read IOPs  | Write IOPs   | Read Time  | Write Time  |
 | :---------- | :--------- | :----------- | :--------  | :---------- |
-END_DISK
+END_DISKIO
 
     foreach my $dev (sort keys %{$options{entry}->{partitions}}) {
         my $values = $options{entry}->{partitions}->{$dev};
@@ -361,6 +361,32 @@ END_DISK
     return $diskio;
 }
 
+sub md_node_centreon_packages {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $packages = "#### Packages\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $packages .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        return $packages;
+    }
+
+    $packages .= <<"END_PACKAGES";
+| Name  | Version |
+| :---- | :----   |
+END_PACKAGES
+
+    
+    foreach my $entry (sort { $a->[0] cmp $b->[0] } @{$options{entry}->{list}}) {
+        $packages .= <<"END_PACKAGES";
+| $entry->[0] | $entry->[1] |
+END_PACKAGES
+    }
+
+    return $packages;
+}
+
 sub md_node_system {
     my ($self, %options) = @_;
 
@@ -390,7 +416,21 @@ $disks
 $disks_io
 
 END_CONTENT
-    
+
+}
+
+sub md_node_centreon {
+    my ($self, %options) = @_;
+
+    my $packages = $self->md_node_centreon_packages(entry => $options{node}->{metrics}->{'centreon::packages'});
+
+    $self->{md_content} .= <<"END_CONTENT";
+### Centreon
+
+$packages
+
+END_CONTENT
+
 }
 
 sub md_node {
@@ -403,6 +443,7 @@ sub md_node {
     }
 
     $self->md_node_system(%options);
+    $self->md_node_centreon(%options);
 }
 
 sub md_output {

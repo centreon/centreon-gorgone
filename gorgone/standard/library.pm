@@ -30,11 +30,13 @@ use Crypt::PK::RSA;
 use Crypt::PRNG;
 use Crypt::CBC;
 use Data::Dumper;
-use YAML 'LoadFile';
 use File::Path;
 use File::Basename;
 use MIME::Base64;
 use Time::HiRes;
+use YAML::XS;
+$YAML::XS::Boolean = 'JSON::PP';
+$YAML::XS::LoadBlessed = 1;
 
 my %zmq_type = ('ZMQ_ROUTER' => ZMQ_ROUTER, 'ZMQ_DEALER' => ZMQ_DEALER);
 my $ZMQ_CONNECT_TIMEOUT = 79;
@@ -47,7 +49,7 @@ sub read_config {
     
     my $config;
     eval {
-        $config = LoadFile($options{config_file});
+        $config = YAML::XS::LoadFile($options{config_file});
     };
     if ($@) {
         $options{logger}->writeLogError("[core] Parsing config file error:");

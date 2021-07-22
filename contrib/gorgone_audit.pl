@@ -290,7 +290,7 @@ sub md_node_system_disk {
 
     my $disk = "#### Filesystems\n\n";
     if ($options{entry}->{status_code} != 0) {
-        $disk .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        $disk .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
         return $disk;
     }
 
@@ -306,6 +306,7 @@ END_DISK
 END_DISK
     }
 
+    $disk .= "\n";
     return $disk;
 }
 
@@ -316,7 +317,7 @@ sub md_node_system_diskio {
 
     my $diskio = "#### Disks I/O\n\n";
     if ($options{entry}->{status_code} != 0) {
-        $diskio .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        $diskio .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
         return $diskio;
     }
 
@@ -358,6 +359,7 @@ END_DISKIO
             ) . "|\n";
     }
 
+    $diskio .= "\n";
     return $diskio;
 }
 
@@ -368,7 +370,7 @@ sub md_node_centreon_packages {
 
     my $packages = "#### Packages\n\n";
     if ($options{entry}->{status_code} != 0) {
-        $packages .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        $packages .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
         return $packages;
     }
 
@@ -383,6 +385,7 @@ END_PACKAGES
 END_PACKAGES
     }
 
+    $packages .= "\n";
     return $packages;
 }
 
@@ -393,7 +396,7 @@ sub md_node_centreon_realtime {
 
     my $realtime = "#### Realtime\n\n";
     if ($options{entry}->{status_code} != 0) {
-        $realtime .= '_**Error:** cannot get informations ' . $options{node}->{status_message};
+        $realtime .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
         return $realtime;
     }
 
@@ -403,9 +406,114 @@ number of services: $options{entry}->{services_count} \\
 number of hostgroups: $options{entry}->{hostgroups_count} \\
 number of servicegroups: $options{entry}->{servicegroups_count} \\
 number of acl: $options{entry}->{acl_count}
+
 END_REALTIME
 
     return $realtime;
+}
+
+sub md_node_centreon_rrd {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $rrd = "#### Rrd\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $rrd .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
+        return $rrd;
+    }
+
+    $rrd .= <<"END_RRD";
+number of metrics rrd: $options{entry}->{rrd_metrics_count} \\
+number of metrics rrd outdated: $options{entry}->{rrd_metrics_outdated} \\
+size of metrics rrd: $options{entry}->{rrd_metrics_human} \\
+number of status rrd: $options{entry}->{rrd_status_count} \\
+number of status rrd outdated: $options{entry}->{rrd_status_outdated} \\
+size of metrics rrd: $options{entry}->{rrd_status_human}
+
+END_RRD
+
+    return $rrd;
+}
+
+sub md_node_centreon_database {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $db = "#### Database\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $db .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
+        return $db;
+    }
+
+    $db .= <<"END_DATABASE";
+Total databases space used: $options{entry}->{space_used_human} \\
+Total databases space free: $options{entry}->{space_free_human}
+
+END_DATABASE
+
+    $db .= <<"END_DATABASE";
+| Database  | Used | Free | 
+| :-------- | :--- | :--- |
+END_DATABASE
+
+    foreach my $dbname (sort keys %{$options{entry}->{databases}}) {
+        $db .= sprintf(
+            '| %s | %s | %s |' . "\n",
+            $dbname,
+            $options{entry}->{databases}->{$dbname}->{space_used_human},
+            $options{entry}->{databases}->{$dbname}->{space_free_human}
+        );
+    }
+
+    $db .= <<"END_DATABASE";
+
+| Table     | Engine | Used | Free | Frag | 
+| :-------- | :----- | :--- | :--- | :--- |
+END_DATABASE
+
+    foreach my $dbname (sort keys %{$options{entry}->{databases}}) {
+        foreach my $table (sort keys %{$options{entry}->{databases}->{$dbname}->{tables}}) {
+            $db .= sprintf(
+            '| %s | %s | %s | %s | %.2f%% |' . "\n",
+                $dbname . '.' . $table,
+                $options{entry}->{databases}->{$dbname}->{tables}->{$table}->{engine},
+                $options{entry}->{databases}->{$dbname}->{tables}->{$table}->{space_used_human},
+                $options{entry}->{databases}->{$dbname}->{tables}->{$table}->{space_free_human},
+                $options{entry}->{databases}->{$dbname}->{tables}->{$table}->{frag}
+            );
+        }
+    }
+
+    $db .= "\n";
+    return $db;
+}
+
+sub md_node_centreon_pluginpacks {
+    my ($self, %options) = @_;
+
+    return '' if (!defined($options{entry}));
+
+    my $pp = "#### Plugin-Packs\n\n";
+    if ($options{entry}->{status_code} != 0) {
+        $pp .= '_**Error:** cannot get informations ' . $options{node}->{status_message} . "\n\n";
+        return $pp;
+    }
+
+    $pp .= <<"END_PP";
+| Pack installed  | Version |
+| :-------------- | :------ |
+END_PP
+
+    foreach my $entry (sort { $a->{slug} cmp $b->{slug} } @{$options{entry}->{installed}}) {
+        $pp .= <<"END_PP";
+| $entry->{slug} | $entry->{version} |
+END_PP
+    }
+
+    $pp .= "\n";
+    return $pp;
 }
 
 sub md_node_system {
@@ -420,8 +528,7 @@ sub md_node_system {
     my $disks = $self->md_node_system_disk(entry => $options{node}->{metrics}->{'system::disk'});
     my $disks_io = $self->md_node_system_diskio(entry => $options{node}->{metrics}->{'system::diskio'});
 
-    $self->{md_content} .= <<"END_CONTENT";
-### System
+    $self->{md_content} .= "### System
 
 #### Overall
 
@@ -432,10 +539,7 @@ kernel: $kernel
 ${cpu}${load}${memory}
 </table>
 
-$disks
-$disks_io
-
-END_CONTENT
+${disks}${disks_io}";
 
 }
 
@@ -443,15 +547,14 @@ sub md_node_centreon {
     my ($self, %options) = @_;
 
     my $realtime = $self->md_node_centreon_realtime(entry => $options{node}->{metrics}->{'centreon::realtime'});
+    my $rrd = $self->md_node_centreon_rrd(entry => $options{node}->{metrics}->{'centreon::rrd'});
+    my $database = $self->md_node_centreon_database(entry => $options{node}->{metrics}->{'centreon::database'});
     my $packages = $self->md_node_centreon_packages(entry => $options{node}->{metrics}->{'centreon::packages'});
+    my $pp = $self->md_node_centreon_pluginpacks(entry => $options{node}->{metrics}->{'centreon::pluginpacks'});
 
-    $self->{md_content} .= <<"END_CONTENT";
-### Centreon
+    $self->{md_content} .= "### Centreon
 
-$realtime
-$packages
-
-END_CONTENT
+${realtime}${rrd}${database}${packages}${pp}";
 
 }
 

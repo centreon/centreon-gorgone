@@ -90,7 +90,7 @@ sub exit_process {
         $self->{logger}->writeLogInfo("[proxy] Close internal connection for $_");
         zmq_close($self->{internal_channels}->{$_});
     }
-    $self->{logger}->writeLogInfo("[proxy] Close control connection for $_");
+    $self->{logger}->writeLogInfo("[proxy] Close control connection");
     zmq_close($self->{internal_socket});
     exit(0);
 }

@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package gorgone::modules::core::httpserverng::class;
+package gorgone::modules::core::httpserverng::application;
 
 use base qw(gorgone::class::module);
 
@@ -40,56 +40,7 @@ my $time = time();
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
-plugin('basic_auth_plus');
-
-websocket '/echo' => sub {
-    my $mojo = shift;
-
-    print sprintf("Client connected: %s\n", $mojo->tx->connection);
-    my $ws_id = sprintf("%s", $mojo->tx->connection);
-    $connector->{clients}->{$ws_id} = $mojo->tx;
-
-    $mojo->on(message => sub {
-        my ($self, $msg) = @_;
-
-        my $dt   = DateTime->now(time_zone => 'Asia/Tokyo');
-
-        for (keys %{$self->{clients}}) {
-            $connector->{clients}->{$_}->send({json => {
-                hms  => $dt->hms,
-                text => $msg,
-            }});
-        }
-    });
-
-    $mojo->on(finish => sub {
-        my ($mojo, $code, $reason) = @_;
-
-        print "Client disconnected: $code\n";
-        delete $connector->{clients}->{ $mojo->tx->connection };
-    });
-};
-
-get '/' => sub { 
-    my $mojo = shift;
-
-    print $mojo->tx->remote_address . "===\n";
-    if ($connector->{auth_enabled} == 1) {
-        my ($hash_ref, $auth_ok) = $mojo->basic_auth(
-            'Realm Name' => {
-                username => $connector->{config}->{auth}->{user},
-                password => $connector->{config}->{auth}->{password}
-            }
-        );
-        if (!$auth_ok) {
-            return $mojo->render(json => { message => 'failed' }, status => 401);
-        }
-    }
-
-    $mojo->render(json => { message => 'ok' });
-};
-
-sub construct {
+sub new {
     my ($class, %options) = @_;
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
@@ -200,20 +151,64 @@ sub run {
         data => {}
     );
 
+    plugin('basic_auth_plus');
+    if ($self->{config}->{ssl} eq 'true' && defined($self->{config}->{passphrase}) && $self->{config}->{passphrase} ne '') {
+        IO::Socket::SSL::set_defaults(SSL_passwd_cb => sub { return $connector->{config}->{passphrase} } );
+    }
+
+    websocket '/echo' => sub {
+        my $mojo = shift;
+
+        print sprintf("Client connected: %s\n", $mojo->tx->connection);
+        my $ws_id = sprintf "%s", $mojo->tx->connection;
+        $self->{clients}->{$ws_id} = $mojo->tx;
+
+        $self->on(message => sub {
+            my ($self, $msg) = @_;
+
+            my $dt   = DateTime->now(time_zone => 'Asia/Tokyo');
+
+            for (keys %{$self->{clients}}) {
+                $self->{clients}->{$_}->send({json => {
+                    hms  => $dt->hms,
+                    text => $msg,
+                }});
+            }
+        });
+
+        $self->on(finish => sub {
+            my ($mojo, $code, $reason) = @_;
+
+            print "Client disconnected: $code\n";
+            delete $self->{clients}->{ $mojo->tx->connection };
+        });
+    };
+
+    get '/' => sub { 
+        my $mojo = shift;
+
+        if ($self->{auth_enabled} == 1) {
+            my ($hash_ref, $auth_ok) = $mojo->basic_auth(
+                'Realm Name' => {
+                    username => $self->{config}->{auth}->{user},
+                    password => $self->{config}->{auth}->{password}
+                }
+            );
+            if (!$auth_ok) {
+                return $mojo->render(json => { message => 'failed' }, status => 401);
+            }
+        }
+
+        $mojo->render(text => 'ok');
+    };
+
     my $listen = 'reuse=1';
     if ($self->{config}->{ssl} eq 'true') {
         $listen .= '&cert=' . $self->{config}->{ssl_cert_file} . '&key=' . $self->{config}->{ssl_key_file};
     }
-    my $proto = 'http';
-    if ($self->{config}->{ssl} eq 'true') {
-        $proto = 'https';
-        if (defined($self->{config}->{passphrase}) && $self->{config}->{passphrase} ne '') {
-            IO::Socket::SSL::set_defaults(SSL_passwd_cb => sub { return $connector->{config}->{passphrase} } );
-        }
-    }
     my $daemon = Mojo::Server::Daemon->new(
         app    => app,
-        listen => [$proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '?' . $listen]
+        listen => ['https://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '?' . $listen]
     );
     $daemon->run();
 

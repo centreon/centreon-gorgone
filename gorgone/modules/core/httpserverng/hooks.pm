@@ -157,11 +157,11 @@ sub broadcast {}
 sub create_child {
     my (%options) = @_;
     
-    $options{logger}->writeLogInfo("[httpserverng] Create module 'httpserver' process");
+    $options{logger}->writeLogInfo("[httpserverng] Create module 'httpserverng' process");
     my $child_pid = fork();
     if ($child_pid == 0) {
         $0 = 'gorgone-httpserverng';
-        my $module = gorgone::modules::core::httpserverng::class->new(
+        my $module = gorgone::modules::core::httpserverng::class->construct(
             logger => $options{logger},
             module_id => NAME,
             config_core => $config_core,

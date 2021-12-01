@@ -31,7 +31,9 @@ use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use Mojolicious::Lite;
 use Mojo::Server::Daemon;
+use Mojo::Reactor::EV;
 use IO::Socket::SSL;
+use IO::Handle;
 use JSON::XS;
 use Socket;
 
@@ -73,7 +75,22 @@ websocket '/echo' => sub {
 get '/' => sub { 
     my $mojo = shift;
 
-    print $mojo->tx->remote_address . "===\n";
+    gorgone::standard::library::zmq_send_message(
+        socket => $connector->{internal_socket},
+        action => 'CONSTATUS',
+        token => 'ploptest',
+        data => {},
+        json_encode => 1
+    );
+    $connector->read_zmq_events();
+
+    if ($connector->{allowed_hosts_enabled} == 1) {
+        if ($connector->check_allowed_host(peer_addr => $mojo->tx->remote_address) == 0) {
+            $connector->{logger}->writeLogError("[httpserverng] " . $mojo->tx->remote_address . " Unauthorized");
+            return $mojo->render(json => { message => 'unauthorized' }, status => 401);
+        }
+    }
+
     if ($connector->{auth_enabled} == 1) {
         my ($hash_ref, $auth_ok) = $mojo->basic_auth(
             'Realm Name' => {
@@ -82,7 +99,7 @@ get '/' => sub {
             }
         );
         if (!$auth_ok) {
-            return $mojo->render(json => { message => 'failed' }, status => 401);
+            return $mojo->render(json => { message => 'unauthorized' }, status => 401);
         }
     }
 
@@ -102,7 +119,7 @@ sub construct {
     if (gorgone::standard::misc::mymodule_load(
             logger => $connector->{logger},
             module => 'NetAddr::IP',
-            error_msg => "[httpserver] -class- cannot load module 'NetAddr::IP'. Cannot use allowed_hosts configuration.")
+            error_msg => "[httpserverng] -class- cannot load module 'NetAddr::IP'. Cannot use allowed_hosts configuration.")
     ) {
         $connector->{allowed_hosts_enabled} = 0;
     }
@@ -182,6 +199,19 @@ sub load_peer_subnets {
     }
 }
 
+sub read_zmq_events {
+    my ($self, %options) = @_;
+
+    while (my $events = gorgone::standard::library::zmq_events(socket => $self->{internal_socket})) {
+        if ($events & ZMQ_POLLIN) {
+            my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+            print "===MESSAGE = zmq received $message ===\n";
+        } else {
+            last;
+        }
+    }
+}
+
 sub run {
     my ($self, %options) = @_;
 
@@ -199,6 +229,16 @@ sub run {
         action => 'HTTPSERVERNGREADY',
         data => {}
     );
+    $self->read_zmq_events();
+
+    my $socket_fd = gorgone::standard::library::zmq_getfd(socket => $self->{internal_socket});
+    my $socket = IO::Handle->new();
+    $socket->fdopen($socket_fd, 'r');
+    Mojo::IOLoop->singleton->reactor->io($socket => sub {
+        print "===ICI===\n";
+        $connector->read_zmq_events();
+    });
+    Mojo::IOLoop->singleton->reactor->watch($socket, 1, 0);
 
     my $listen = 'reuse=1';
     if ($self->{config}->{ssl} eq 'true') {
@@ -215,6 +255,17 @@ sub run {
         app    => app,
         listen => [$proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '?' . $listen]
     );
+    #my $loop = Mojo::IOLoop->new();
+    #my $reactor = Mojo::Reactor::EV->new();
+    #$reactor->io($socket => sub {
+    #    print "===la==\n";
+    #    my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket}); 
+    #    print "===MESSAGE = zmq received $message ===\n";
+    #});
+    #$reactor->watch($socket, 1, 0);
+    #$loop->reactor($reactor);
+    #$daemon->ioloop($loop);
+
     $daemon->run();
 
 =pod
@@ -318,44 +369,6 @@ sub run {
         undef($connection);
     }
 =cut
-}
-
-sub authentication {
-    my ($self, $header) = @_;
-
-    return 1 if ($self->{auth_enabled} == 0);
-
-    return 0 if (!defined($header) || $header eq '');
-
-    ($header =~ /Basic\s(.*)$/);
-    my ($user, $password) = split(/:/, MIME::Base64::decode($1), 2);
-    return 1 if (defined($self->{config}->{auth}->{user}) && $user eq $self->{config}->{auth}->{user} && 
-        defined($self->{config}->{auth}->{password}) && $password eq $self->{config}->{auth}->{password});
-
-    return 0;
-}
-
-sub send_response {
-    my ($self, %options) = @_;
-
-    if (defined($options{response}) && $options{response} ne '') {
-        my $response = HTTP::Response->new(200);
-        $response->header('Content-Type' => 'application/json'); 
-        $response->content($options{response} . "\n");
-        $options{connection}->send_response($response);
-    } else {
-        my $response = HTTP::Response->new(204);
-        $options{connection}->send_response($response);
-    }
-}
-
-sub send_error {
-    my ($self, %options) = @_;
-
-    my $response = HTTP::Response->new($options{code});
-    $response->header('Content-Type' => 'application/json'); 
-    $response->content($options{response} . "\n");
-    $options{connection}->send_response($response);
 }
 
 sub api_call {

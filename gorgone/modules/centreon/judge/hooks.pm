@@ -22,7 +22,6 @@ package gorgone::modules::centreon::judge::hooks;
 
 use warnings;
 use strict;
-use JSON::XS;
 use gorgone::class::core;
 use gorgone::modules::centreon::judge::class;
 use gorgone::standard::constants qw(:all);
@@ -62,10 +61,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[judge] Cannot decode json data: $@");
         gorgone::standard::library::add_history(

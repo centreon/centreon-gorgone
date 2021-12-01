@@ -22,7 +22,6 @@ package gorgone::modules::centreon::autodiscovery::hooks;
 
 use warnings;
 use strict;
-use JSON::XS;
 use gorgone::class::core;
 use gorgone::modules::centreon::autodiscovery::class;
 use gorgone::standard::constants qw(:all);
@@ -65,10 +64,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[autodiscovery] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
@@ -102,7 +97,7 @@ sub routing {
         identity => 'gorgone-autodiscovery',
         action => $options{action},
         data => $options{data},
-        token => $options{token},
+        token => $options{token}
     );
 }
 

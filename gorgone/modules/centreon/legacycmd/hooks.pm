@@ -25,7 +25,6 @@ use strict;
 use gorgone::class::core;
 use gorgone::modules::centreon::legacycmd::class;
 use gorgone::standard::constants qw(:all);
-use JSON::XS;
 
 use constant NAMESPACE => 'centreon';
 use constant NAME => 'legacycmd';
@@ -63,10 +62,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[legacycmd] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
@@ -100,7 +95,7 @@ sub routing {
         identity => 'gorgone-legacycmd',
         action => $options{action},
         data => $options{data},
-        token => $options{token},
+        token => $options{token}
     );
 }
 

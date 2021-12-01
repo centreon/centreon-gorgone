@@ -18,23 +18,23 @@
 # limitations under the License.
 #
 
-package gorgone::modules::core::httpserver::hooks;
+package gorgone::modules::core::httpserverng::hooks;
 
 use warnings;
 use strict;
 use gorgone::class::core;
-use gorgone::modules::core::httpserver::class;
+use gorgone::modules::core::httpserverng::class;
 use gorgone::standard::constants qw(:all);
 
 use constant NAMESPACE => 'core';
-use constant NAME => 'httpserver';
+use constant NAME => 'httpserverng';
 use constant EVENTS => [
-    { event => 'HTTPSERVERREADY' },
+    { event => 'HTTPSERVERNGREADY' }
 ];
 
 my $config_core;
 my $config;
-my $httpserver = {};
+my $httpserverng = {};
 my $stop = 0;
 
 sub register {
@@ -47,11 +47,11 @@ sub register {
     $config->{port} = defined($config->{port}) && $config->{port} =~ /(\d+)/ ? $1 : 8080;
     if (defined($config->{auth}->{enabled}) && $config->{auth}->{enabled} eq 'true') {
         if (!defined($config->{auth}->{user}) || $config->{auth}->{user} =~ /^\s*$/) {
-            $options{logger}->writeLogError('[httpserver] User option mandatory if authentication is enabled');
+            $options{logger}->writeLogError('[httpserverng] User option mandatory if authentication is enabled');
             $loaded = 0;
         }
         if (!defined($config->{auth}->{password}) || $config->{auth}->{password} =~ /^\s*$/) {
-            $options{logger}->writeLogError('[httpserver] Password option mandatory if authentication is enabled');
+            $options{logger}->writeLogError('[httpserverng] Password option mandatory if authentication is enabled');
             $loaded = 0;
         }
     }
@@ -69,28 +69,28 @@ sub routing {
     my (%options) = @_;
 
     if ($@) {
-        $options{logger}->writeLogError("[httpserver] Cannot decode json data: $@");
+        $options{logger}->writeLogError("[httpserverng] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
-            data => { message => 'gorgonehttpserver: cannot decode json' },
+            data => { message => 'gorgone-httpserverng: cannot decode json' },
             json_encode => 1
         );
         return undef;
     }
     
     if ($options{action} eq 'HTTPSERVERREADY') {
-        $httpserver->{ready} = 1;
+        $httpserverng->{ready} = 1;
         return undef;
     }
     
-    if (gorgone::class::core::waiting_ready(ready => \$httpserver->{ready}) == 0) {
+    if (gorgone::class::core::waiting_ready(ready => \$httpserverng->{ready}) == 0) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
-            data => { message => 'gorgonehttpserver: still no ready' },
+            data => { message => 'gorgone-httpserverng: still no ready' },
             json_encode => 1
         );
         return undef;
@@ -98,10 +98,10 @@ sub routing {
     
     gorgone::standard::library::zmq_send_message(
         socket => $options{socket},
-        identity => 'gorgone-httpserver',
+        identity => 'gorgone-httpserverng',
         action => $options{action},
         data => $options{data},
-        token => $options{token},
+        token => $options{token}
     );
 }
 
@@ -109,18 +109,18 @@ sub gently {
     my (%options) = @_;
 
     $stop = 1;
-    if (defined($httpserver->{running}) && $httpserver->{running} == 1) {
-        $options{logger}->writeLogDebug("[httpserver] Send TERM signal $httpserver->{pid}");
-        CORE::kill('TERM', $httpserver->{pid});
+    if (defined($httpserverng->{running}) && $httpserverng->{running} == 1) {
+        $options{logger}->writeLogDebug("[httpserverng] Send TERM signal $httpserverng->{pid}");
+        CORE::kill('TERM', $httpserverng->{pid});
     }
 }
 
 sub kill {
     my (%options) = @_;
 
-    if ($httpserver->{running} == 1) {
-        $options{logger}->writeLogDebug("[httpserver] Send KILL signal for pool");
-        CORE::kill('KILL', $httpserver->{pid});
+    if ($httpserverng->{running} == 1) {
+        $options{logger}->writeLogDebug("[httpserverng] Send KILL signal for pool");
+        CORE::kill('KILL', $httpserverng->{pid});
     }
 }
 
@@ -135,9 +135,9 @@ sub check {
     my $count = 0;
     foreach my $pid (keys %{$options{dead_childs}}) {
         # Not me
-        next if (!defined($httpserver->{pid}) || $httpserver->{pid} != $pid);
+        next if (!defined($httpserverng->{pid}) || $httpserverng->{pid} != $pid);
 
-        $httpserver = {};
+        $httpserverng = {};
         delete $options{dead_childs}->{$pid};
         if ($stop == 0) {
             create_child(logger => $options{logger}, api_endpoints => $options{api_endpoints});
@@ -146,7 +146,7 @@ sub check {
         last;
     }
 
-    $count++  if (defined($httpserver->{running}) && $httpserver->{running} == 1);
+    $count++  if (defined($httpserverng->{running}) && $httpserverng->{running} == 1);
 
     return $count;
 }
@@ -157,11 +157,11 @@ sub broadcast {}
 sub create_child {
     my (%options) = @_;
     
-    $options{logger}->writeLogInfo("[httpserver] Create module 'httpserver' process");
+    $options{logger}->writeLogInfo("[httpserverng] Create module 'httpserver' process");
     my $child_pid = fork();
     if ($child_pid == 0) {
-        $0 = 'gorgone-httpserver';
-        my $module = gorgone::modules::core::httpserver::class->new(
+        $0 = 'gorgone-httpserverng';
+        my $module = gorgone::modules::core::httpserverng::class->new(
             logger => $options{logger},
             module_id => NAME,
             config_core => $config_core,
@@ -171,8 +171,8 @@ sub create_child {
         $module->run();
         exit(0);
     }
-    $options{logger}->writeLogDebug("[httpserver] PID $child_pid (gorgone-httpserver)");
-    $httpserver = { pid => $child_pid, ready => 0, running => 1 };
+    $options{logger}->writeLogDebug("[httpserverng] PID $child_pid (gorgone-httpserverng)");
+    $httpserverng = { pid => $child_pid, ready => 0, running => 1 };
 }
 
 1;

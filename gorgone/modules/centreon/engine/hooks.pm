@@ -22,7 +22,6 @@ package gorgone::modules::centreon::engine::hooks;
 
 use warnings;
 use strict;
-use JSON::XS;
 use gorgone::class::core;
 use gorgone::standard::constants qw(:all);
 use gorgone::modules::centreon::engine::class;
@@ -31,7 +30,7 @@ use constant NAMESPACE => 'centreon';
 use constant NAME => 'engine';
 use constant EVENTS => [
     { event => 'ENGINEREADY' },
-    { event => 'ENGINECOMMAND', uri => '/command', method => 'POST' },
+    { event => 'ENGINECOMMAND', uri => '/command', method => 'POST' }
 ];
 
 my $config_core;
@@ -57,10 +56,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[engine] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
@@ -94,7 +89,7 @@ sub routing {
         identity => 'gorgone-engine',
         action => $options{action},
         data => $options{data},
-        token => $options{token},
+        token => $options{token}
     );
 }
 

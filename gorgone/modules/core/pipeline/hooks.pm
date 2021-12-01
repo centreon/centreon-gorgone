@@ -22,7 +22,6 @@ package gorgone::modules::core::pipeline::hooks;
 
 use warnings;
 use strict;
-use JSON::XS;
 use gorgone::class::core;
 use gorgone::modules::core::pipeline::class;
 use gorgone::standard::constants qw(:all);
@@ -67,10 +66,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[pipeline] Cannot decode json data: $@");
         gorgone::standard::library::add_history(

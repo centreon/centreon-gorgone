@@ -25,7 +25,6 @@ use strict;
 use gorgone::class::core;
 use gorgone::modules::core::action::class;
 use gorgone::standard::constants qw(:all);
-use JSON::XS;
 
 use constant NAMESPACE => 'core';
 use constant NAME => 'action';
@@ -57,10 +56,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    my $data;
-    eval {
-        $data = JSON::XS->new->utf8->decode($options{data});
-    };
     if ($@) {
         $options{logger}->writeLogError("[action] Cannot decode json data: $@");
         gorgone::standard::library::add_history(
@@ -94,7 +89,7 @@ sub routing {
         identity => 'gorgone-action',
         action => $options{action},
         data => $options{data},
-        token => $options{token},
+        token => $options{token}
     );
 }
 

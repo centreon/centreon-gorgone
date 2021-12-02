@@ -28,19 +28,19 @@ use gorgone::standard::library;
 use gorgone::standard::constants qw(:all);
 use gorgone::standard::misc;
 use ZMQ::Constants qw(:all);
+use ZMQ::LibZMQ4;
 use Mojolicious::Lite;
 use Mojo::Server::Daemon;
 use IO::Socket::SSL;
 use IO::Handle;
 use JSON::XS;
 
-my $time = time();
-
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
 plugin('basic_auth_plus');
 
+=pod
 websocket '/echo' => sub {
     my $mojo = shift;
 
@@ -68,6 +68,7 @@ websocket '/echo' => sub {
         delete $connector->{clients}->{ $mojo->tx->connection };
     });
 };
+=cut
 
 patch '/*' => sub {
     my $mojo = shift;
@@ -236,6 +237,9 @@ sub run {
     #$daemon->ioloop($loop);
 
     $daemon->run();
+
+    zmq_close($self->{internal_socket});
+    exit(0);
 }
 
 sub read_log_event {

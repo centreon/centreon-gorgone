@@ -72,38 +72,31 @@ websocket '/echo' => sub {
     });
 };
 
-get '/' => sub { 
+patch '/*' => sub {
     my $mojo = shift;
 
-    gorgone::standard::library::zmq_send_message(
-        socket => $connector->{internal_socket},
-        action => 'CONSTATUS',
-        token => 'ploptest',
-        data => {},
-        json_encode => 1
+    $connector->api_call(
+        mojo => $mojo,
+        method => 'PATCH'
     );
-    $connector->read_zmq_events();
+};
 
-    if ($connector->{allowed_hosts_enabled} == 1) {
-        if ($connector->check_allowed_host(peer_addr => $mojo->tx->remote_address) == 0) {
-            $connector->{logger}->writeLogError("[httpserverng] " . $mojo->tx->remote_address . " Unauthorized");
-            return $mojo->render(json => { message => 'unauthorized' }, status => 401);
-        }
-    }
+post '/*' => sub {
+    my $mojo = shift;
 
-    if ($connector->{auth_enabled} == 1) {
-        my ($hash_ref, $auth_ok) = $mojo->basic_auth(
-            'Realm Name' => {
-                username => $connector->{config}->{auth}->{user},
-                password => $connector->{config}->{auth}->{password}
-            }
-        );
-        if (!$auth_ok) {
-            return $mojo->render(json => { message => 'unauthorized' }, status => 401);
-        }
-    }
+    $connector->api_call(
+        mojo => $mojo,
+        method => 'POST'
+    );
+};
 
-    $mojo->render(json => { message => 'ok' });
+get '/*' => sub { 
+    my $mojo = shift;
+
+    $connector->api_call(
+        mojo => $mojo,
+        method => 'GET'
+    );
 };
 
 sub construct {
@@ -115,6 +108,7 @@ sub construct {
     $connector->{auth_enabled} = (defined($connector->{config}->{auth}->{enabled}) && $connector->{config}->{auth}->{enabled} eq 'true') ? 1 : 0;
     $connector->{allowed_hosts_enabled} = (defined($connector->{config}->{allowed_hosts}->{enabled}) && $connector->{config}->{allowed_hosts}->{enabled} eq 'true') ? 1 : 0;
     $connector->{clients} = {};
+    $connector->{token_watch} = {};
 
     if (gorgone::standard::misc::mymodule_load(
             logger => $connector->{logger},
@@ -160,15 +154,6 @@ sub class_handle_HUP {
     }
 }
 
-sub event {
-    while (1) {
-        my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
-        last if (!defined($message));
-
-        $connector->{logger}->writeLogDebug("[httpserver] Event: $message");
-    }
-}
-
 sub check_allowed_host {
     my ($self, %options) = @_;
 
@@ -191,24 +176,11 @@ sub load_peer_subnets {
     foreach (@{$self->{config}->{allowed_hosts}->{subnets}}) {
         my $subnet = NetAddr::IP->new($_);
         if (!defined($subnet)) {
-            $self->{logger}->writeLogError("[httpserver] Cannot load subnet: $_");
+            $self->{logger}->writeLogError("[httpserverng] Cannot load subnet: $_");
             next;
         }
 
         push @{$self->{peer_subnets}}, $subnet;
-    }
-}
-
-sub read_zmq_events {
-    my ($self, %options) = @_;
-
-    while (my $events = gorgone::standard::library::zmq_events(socket => $self->{internal_socket})) {
-        if ($events & ZMQ_POLLIN) {
-            my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
-            print "===MESSAGE = zmq received $message ===\n";
-        } else {
-            last;
-        }
     }
 }
 
@@ -232,8 +204,7 @@ sub run {
     $self->read_zmq_events();
 
     my $socket_fd = gorgone::standard::library::zmq_getfd(socket => $self->{internal_socket});
-    my $socket = IO::Handle->new();
-    $socket->fdopen($socket_fd, 'r');
+    my $socket = IO::Handle->new_from_fd($socket_fd, 'r');
     Mojo::IOLoop->singleton->reactor->io($socket => sub {
         print "===ICI===\n";
         $connector->read_zmq_events();
@@ -251,6 +222,7 @@ sub run {
             IO::Socket::SSL::set_defaults(SSL_passwd_cb => sub { return $connector->{config}->{passphrase} } );
         }
     }
+    app->mode('production');
     my $daemon = Mojo::Server::Daemon->new(
         app    => app,
         listen => [$proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '?' . $listen]
@@ -258,143 +230,192 @@ sub run {
     #my $loop = Mojo::IOLoop->new();
     #my $reactor = Mojo::Reactor::EV->new();
     #$reactor->io($socket => sub {
-    #    print "===la==\n";
     #    my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket}); 
-    #    print "===MESSAGE = zmq received $message ===\n";
     #});
     #$reactor->watch($socket, 1, 0);
     #$loop->reactor($reactor);
     #$daemon->ioloop($loop);
 
     $daemon->run();
+}
 
-=pod
-    $self->{poll} = [
-        {
-            socket  => $connector->{internal_socket},
-            events  => ZMQ_POLLIN,
-            callback => \&event
+sub read_log_event {
+    my ($self, %options) = @_;
+
+    my $response = { error => 'no_log', message => 'No log found for token', data => [], token => $options{token} };
+    if (defined($options{data})) {
+        my $content;
+        eval {
+            $content = JSON::XS->new->utf8->decode($options{data});
+        };
+        if ($@) {
+            $response = { error => 'decode_error', message => 'Cannot decode response' };
+        } elsif (defined($content->{data}->{result}) && scalar(@{$content->{data}->{result}}) > 0) {
+            $response = {
+                message => 'Logs found',
+                token => $options{token},
+                data => $content->{data}->{result}
+            };
         }
-    ];
-
-    my $rev = zmq_poll($self->{poll}, 4000);
-
-    $self->init_dispatch();
-
-    # HTTP daemon
-    my ($daemon, $message_error);
-    if ($self->{config}->{ssl} eq 'false') {
-        $message_error = '$@';
-        $daemon = HTTP::Daemon->new(
-            LocalAddr => $self->{config}->{address} . ':' . $self->{config}->{port},
-            ReusePort => 1,
-            Timeout => 5
-        );
-    } elsif ($self->{config}->{ssl} eq 'true') {
-        $message_error = '$!, ssl_error=$IO::Socket::SSL::SSL_ERROR';
-        $daemon = HTTP::Daemon::SSL->new(
-            LocalAddr => $self->{config}->{address} . ':' . $self->{config}->{port},
-            SSL_cert_file => $self->{config}->{ssl_cert_file},
-            SSL_key_file => $self->{config}->{ssl_key_file},
-            SSL_error_trap => \&ssl_error,
-            ReusePort => 1,
-            Timeout => 5
-        );
     }
 
-    if (!defined($daemon)) {
-        eval "\$message_error = \"$message_error\"";
-        $connector->{logger}->writeLogError("[httpserver] can't construct socket: $message_error");
-        exit(1);
-    }
+    $self->{token_watch}->{ $options{token} }->render(json => $response);
+    delete $self->{token_watch}->{ $options{token} };
+}
 
-    while (1) {
-        my ($connection) = $daemon->accept();
+sub read_zmq_events {
+    my ($self, %options) = @_;
 
-        if ($self->{stop} == 1) {
-            $self->{logger}->writeLogInfo("[httpserver] $$ has quit");
-            $connection->close() if (defined($connection));
-            zmq_close($connector->{internal_socket});
-            exit(0);
-        }
-
-        next if (!defined($connection));
-
-        while (my $request = $connection->get_request) {
-            if ($connection->antique_client eq '1') {
-                $connection->force_last_request;
-                next;
-            }
-
-            my $msg = "[httpserver] " . $connection->peerhost() . " " . $request->method . " '" . $request->uri->path . "'";
-            $msg .= " '" . $request->header("User-Agent") . "'" if (defined($request->header("User-Agent")) && $request->header("User-Agent") ne '');
-            $connector->{logger}->writeLogInfo($msg);
-            
-            if ($connector->{allowed_hosts_enabled} == 1) {
-                if ($connector->check_allowed_host(peer_addr => inet_ntoa($connection->peeraddr())) == 0) {
-                    $connector->{logger}->writeLogError("[httpserver] " . $connection->peerhost() . " Unauthorized");
-                    $self->send_error(
-                        connection => $connection,
-                        code => "401",
-                        response => '{"error":"http_error_401","message":"unauthorized"}'
-                    );
-                    next;
+    while (my $events = gorgone::standard::library::zmq_events(socket => $self->{internal_socket})) {
+        if ($events & ZMQ_POLLIN) {
+            my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+            print "===MESSAGE = zmq received $message ===\n";
+            if ($message =~ /^\[(.*?)\]\s+\[(.*?)\]\s+\[.*?\]\s+(.*)$/m || 
+                $message =~ /^\[(.*?)\]\s+\[(.*?)\]\s+(.*)$/m) {
+                my ($action, $token, $data) = ($1, $2, $3);
+                if (defined($connector->{token_watch}->{$token})) {
+                    if ($token =~ /-log$/) {
+                        $connector->read_log_event(token => $token, data => $data);
+                    }
                 }
             }
-
-            if ($self->authentication($request->header('Authorization'))) { # Check Basic authentication
-                my ($root) = ($request->uri->path =~ /^(\/\w+)/);
-
-                if ($root eq "/api") { # API
-                    $self->send_response(connection => $connection, response => $self->api_call($request));
-                } else { # Forbidden
-                    $connector->{logger}->writeLogError("[httpserver] " . $connection->peerhost() . " '" . $request->uri->path . "' Forbidden");
-                    $self->send_error(
-                        connection => $connection,
-                        code => "403",
-                        response => '{"error":"http_error_403","message":"forbidden"}'
-                    );
-                }
-            } else { # Authen error
-                $connector->{logger}->writeLogError("[httpserver] " . $connection->peerhost() . " Unauthorized");
-                $self->send_error(
-                    connection => $connection,
-                    code => "401",
-                    response => '{"error":"http_error_401","message":"unauthorized"}'
-                );
-            }
-            $connection->force_last_request;
+        } else {
+            last;
         }
-        $connection->close;
-        undef($connection);
     }
-=cut
 }
 
 sub api_call {
-    my ($self, $request) = @_;
+    my ($self, %options) = @_;
 
-    my $content;
-    eval {
-        $content = JSON::XS->new->utf8->decode($request->content)
-            if ($request->method =~ /POST|PATCH/ && defined($request->content));
-    };
-    if ($@) {
-        return '{"error":"decode_error","message":"POST content must be JSON-formated"}';;
+    if ($self->{allowed_hosts_enabled} == 1) {
+        if ($self->check_allowed_host(peer_addr => $options{mojo}->tx->remote_address) == 0) {
+            $connector->{logger}->writeLogError("[httpserverng] " . $options{mojo}->tx->remote_address . " Unauthorized");
+            return $options{mojo}->render(json => { message => 'unauthorized' }, status => 401);
+        }
     }
 
-    my %parameters = $request->uri->query_form;
-    my $response = gorgone::standard::api::root(
-        method => $request->method,
-        uri => $request->uri->path,
-        parameters => \%parameters,
-        content => $content,
-        socket => $connector->{internal_socket},
-        logger => $self->{logger},
-        api_endpoints => $self->{api_endpoints}
-    );
+    if ($self->{auth_enabled} == 1) {
+        my ($hash_ref, $auth_ok) = $options{mojo}->basic_auth(
+            'Realm Name' => {
+                username => $self->{config}->{auth}->{user},
+                password => $self->{config}->{auth}->{password}
+            }
+        );
+        if (!$auth_ok) {
+            return $options{mojo}->render(json => { message => 'unauthorized' }, status => 401);
+        }
+    }
 
-    return $response;
+    my $path = $options{mojo}->tx->req->url->path;
+    my $names = $options{mojo}->req->params->names();
+    my $params = {};
+    foreach (@$names) {
+        $params->{$_} = $options{mojo}->param($_);
+    }
+
+    my $content = $options{mojo}->req->json();
+
+    $self->api_root(
+        mojo => $options{mojo},
+        method => $options{method},
+        uri => $path,
+        parameters => $params,
+        content => $content
+    );
+}
+
+sub get_log {
+    my ($self, %options) = @_;
+
+    if (defined($options{target}) && $options{target} ne '') {        
+        gorgone::standard::library::zmq_send_message(
+            socket => $self->{internal_socket},
+            target => $options{target},
+            action => 'GETLOG',
+            json_encode => 1
+        );
+        $self->read_zmq_events();
+    }
+
+    my $token_log = $options{token} . '-log';
+    $self->{token_watch}->{$token_log} = $options{mojo};
+
+    gorgone::standard::library::zmq_send_message(
+        socket => $self->{internal_socket},
+        action => 'GETLOG',
+        token => $token_log,
+        data => {
+            token => $options{token},
+            %{$options{parameters}}
+        },
+        json_encode => 1
+    );
+    $self->read_zmq_events();
+
+    $options{mojo}->render_later();
+}
+
+sub api_root {
+    my ($self, %options) = @_;
+
+    $self->{logger}->writeLogInfo("[api] Requesting '" . $options{uri} . "' [" . $options{method} . "]");
+
+    my $async = 0;
+    $async = 1 if (defined($options{parameters}->{async}) && $options{parameters}->{async} == 1);
+
+    # async mode:
+    #   provide the token directly and close the connection. need to call GETLOG on the token
+    #   not working with GETLOG and internal call (execpt: CONSTATUS, INFORMATION, GETTHUMBPRINT)
+
+    if ($options{method} eq 'GET' && $options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?log\/(.*)$/) {
+        $self->get_log(
+            mojo => $options{mojo},
+            target => $2,
+            token => $3,
+            parameters => $options{parameters}
+        );
+    } elsif ($options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?internal\/(\w+)\/?([\w\/]*?)$/
+        && defined($options{api_endpoints}->{ $options{method} . '_/internal/' . $3 })) {
+        my @variables = split(/\//, $4);
+        call_internal(
+            action => $options{api_endpoints}->{ $options{method} . '_/internal/' . $3 },
+            target => $2,
+            data => { 
+                content => $options{content},
+                parameters => $options{parameters},
+                variables => \@variables
+            },
+            log_wait => (defined($options{parameters}->{log_wait})) ? $options{parameters}->{log_wait} : undef,
+            sync_wait => (defined($options{parameters}->{sync_wait})) ? $options{parameters}->{sync_wait} : undef
+        );
+    } elsif ($options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?(\w+)\/(\w+)\/(\w+)\/?([\w\/]*?)$/
+        && defined($options{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5})) {
+        my @variables = split(/\//, $6);
+        call_action(
+            action => $options{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5},
+            target => $2,
+            data => { 
+                content => $options{content},
+                parameters => $options{parameters},
+                variables => \@variables
+            }
+        );
+    } else {
+        $options{mojo}->render(json => { error => 'method_unknown', message => 'Method not implemented' }, status => 200);
+        return ;
+    }
+
+#    gorgone::standard::library::zmq_send_message(
+#        socket => $connector->{internal_socket},
+#        action => 'CONSTATUS',
+#        token => 'ploptest',
+#        data => {},
+#        json_encode => 1
+#    );
+#    $connector->read_zmq_events();
+
+    #$options{mojo}->render(json => { message => 'ok' });
 }
 
 1;

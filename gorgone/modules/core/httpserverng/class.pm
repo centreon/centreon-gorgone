@@ -187,6 +187,28 @@ sub run {
 
     $self->load_peer_subnets();
 
+    my $listen = 'reuse=1';
+    if ($self->{config}->{ssl} eq 'true') {
+        if (!defined($self->{config}->{ssl_cert_file}) || $self->{config}->{ssl_cert_file} eq '' ||
+            -r "$self->{config}->{ssl_cert_file}") {
+            $connector->{logger}->writeLogError("[httpserverng] cannot read/find ssl-cert-file");
+            exit(1);
+        }
+        if (!defined($self->{config}->{ssl_key_file}) || $self->{config}->{ssl_key_file} eq '' ||
+            -r "$self->{config}->{ssl_key_file}") {
+            $connector->{logger}->writeLogError("[httpserverng] cannot read/find ssl-key-file");
+            exit(1);
+        }
+        $listen .= '&cert=' . $self->{config}->{ssl_cert_file} . '&key=' . $self->{config}->{ssl_key_file};
+    }
+    my $proto = 'http';
+    if ($self->{config}->{ssl} eq 'true') {
+        $proto = 'https';
+        if (defined($self->{config}->{passphrase}) && $self->{config}->{passphrase} ne '') {
+            IO::Socket::SSL::set_defaults(SSL_passwd_cb => sub { return $connector->{config}->{passphrase} } );
+        }
+    }
+
     # Connect internal
     $self->{internal_socket} = gorgone::standard::library::connect_com(
         zmq_type => 'ZMQ_DEALER',
@@ -208,17 +230,6 @@ sub run {
     });
     Mojo::IOLoop->singleton->reactor->watch($socket, 1, 0);
 
-    my $listen = 'reuse=1';
-    if ($self->{config}->{ssl} eq 'true') {
-        $listen .= '&cert=' . $self->{config}->{ssl_cert_file} . '&key=' . $self->{config}->{ssl_key_file};
-    }
-    my $proto = 'http';
-    if ($self->{config}->{ssl} eq 'true') {
-        $proto = 'https';
-        if (defined($self->{config}->{passphrase}) && $self->{config}->{passphrase} ne '') {
-            IO::Socket::SSL::set_defaults(SSL_passwd_cb => sub { return $connector->{config}->{passphrase} } );
-        }
-    }
     app->mode('production');
     my $daemon = Mojo::Server::Daemon->new(
         app    => app,

@@ -25,9 +25,8 @@ use base qw(gorgone::class::module);
 use strict;
 use warnings;
 use gorgone::standard::library;
+use gorgone::standard::constants qw(:all);
 use gorgone::standard::misc;
-use gorgone::standard::api;
-use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use Mojolicious::Lite;
 use Mojo::Server::Daemon;
@@ -35,7 +34,6 @@ use Mojo::Reactor::EV;
 use IO::Socket::SSL;
 use IO::Handle;
 use JSON::XS;
-use Socket;
 
 my $time = time();
 
@@ -206,7 +204,6 @@ sub run {
     my $socket_fd = gorgone::standard::library::zmq_getfd(socket => $self->{internal_socket});
     my $socket = IO::Handle->new_from_fd($socket_fd, 'r');
     Mojo::IOLoop->singleton->reactor->io($socket => sub {
-        print "===ICI===\n";
         $connector->read_zmq_events();
     });
     Mojo::IOLoop->singleton->reactor->watch($socket, 1, 0);
@@ -242,7 +239,9 @@ sub run {
 sub read_log_event {
     my ($self, %options) = @_;
 
-    my $response = { error => 'no_log', message => 'No log found for token', data => [], token => $options{token} };
+    my $token = $options{token};
+    $token =~ s/-log$//;
+    my $response = { error => 'no_log', message => 'No log found for token', data => [], token => $token };
     if (defined($options{data})) {
         my $content;
         eval {
@@ -253,14 +252,34 @@ sub read_log_event {
         } elsif (defined($content->{data}->{result}) && scalar(@{$content->{data}->{result}}) > 0) {
             $response = {
                 message => 'Logs found',
-                token => $options{token},
+                token => $token,
                 data => $content->{data}->{result}
             };
         }
     }
 
-    $self->{token_watch}->{ $options{token} }->render(json => $response);
+    $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $response);
     delete $self->{token_watch}->{ $options{token} };
+}
+
+sub read_listener {
+    my ($self, %options) = @_;
+
+    my $content;
+    eval {
+        $content = JSON::XS->new->utf8->decode($options{data});
+    };
+    if ($@) {
+        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => { error => 'decode_error', message => 'Cannot decode response' });
+        delete $self->{token_watch}->{ $options{token} };
+        return ;
+    }
+
+    push @{$self->{token_watch}->{ $options{token} }->{results}}, $content;
+    if ($content->{code} == GORGONE_ACTION_FINISH_KO || $content->{code} == GORGONE_ACTION_FINISH_OK) {
+        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => { data => $self->{token_watch}->{ $options{token} }->{results} });
+        delete $self->{token_watch}->{ $options{token} };
+    }
 }
 
 sub read_zmq_events {
@@ -269,12 +288,14 @@ sub read_zmq_events {
     while (my $events = gorgone::standard::library::zmq_events(socket => $self->{internal_socket})) {
         if ($events & ZMQ_POLLIN) {
             my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
-            print "===MESSAGE = zmq received $message ===\n";
+            $connector->{logger}->writeLogDebug('[httpserverng] zmq message received: ' . $message);
             if ($message =~ /^\[(.*?)\]\s+\[(.*?)\]\s+\[.*?\]\s+(.*)$/m || 
                 $message =~ /^\[(.*?)\]\s+\[(.*?)\]\s+(.*)$/m) {
                 my ($action, $token, $data) = ($1, $2, $3);
                 if (defined($connector->{token_watch}->{$token})) {
-                    if ($token =~ /-log$/) {
+                    if ($action eq 'HTTPSERVERNGLISTENER') {
+                        $connector->read_listener(token => $token, data => $data);
+                    } elsif ($token =~ /-log$/) {
                         $connector->read_log_event(token => $token, data => $data);
                     }
                 }
@@ -339,7 +360,7 @@ sub get_log {
     }
 
     my $token_log = $options{token} . '-log';
-    $self->{token_watch}->{$token_log} = $options{mojo};
+    $self->{token_watch}->{$token_log} = { mojo => $options{mojo} };
 
     gorgone::standard::library::zmq_send_message(
         socket => $self->{internal_socket},
@@ -356,6 +377,42 @@ sub get_log {
     $options{mojo}->render_later();
 }
 
+sub call_action {
+    my ($self, %options) = @_;
+
+    my $action_token = gorgone::standard::library::generate_token();
+
+    if ($options{async} == 0) {
+        $self->{token_watch}->{$action_token} = { mojo => $options{mojo}, results => [] };
+        $self->send_internal_action(
+            action => 'ADDLISTENER',
+            data => [
+                {
+                    identity => 'gorgone-httpserverng',
+                    event => 'HTTPSERVERNGLISTENER',
+                    token => $action_token,
+                    timeout => 120
+                }
+            ]
+        );
+        $self->read_zmq_events();
+    }
+
+    $self->send_internal_action(
+        action => $options{action},
+        target => $options{target},
+        token => $action_token,
+        data => $options{data}
+    );
+    $self->read_zmq_events();
+
+    if ($options{async} == 1) {
+        $options{mojo}->render(json => { token => $action_token }, status => 200);
+    } else {
+        $options{mojo}->render_later();
+    }
+}
+
 sub api_root {
     my ($self, %options) = @_;
 
@@ -366,7 +423,9 @@ sub api_root {
 
     # async mode:
     #   provide the token directly and close the connection. need to call GETLOG on the token
-    #   not working with GETLOG and internal call (execpt: CONSTATUS, INFORMATION, GETTHUMBPRINT)
+    #   not working with GETLOG 
+    
+    # listener is used for other case.
 
     if ($options{method} eq 'GET' && $options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?log\/(.*)$/) {
         $self->get_log(
@@ -376,24 +435,26 @@ sub api_root {
             parameters => $options{parameters}
         );
     } elsif ($options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?internal\/(\w+)\/?([\w\/]*?)$/
-        && defined($options{api_endpoints}->{ $options{method} . '_/internal/' . $3 })) {
+        && defined($self->{api_endpoints}->{ $options{method} . '_/internal/' . $3 })) {
         my @variables = split(/\//, $4);
-        call_internal(
-            action => $options{api_endpoints}->{ $options{method} . '_/internal/' . $3 },
+        $self->call_action(
+            mojo => $options{mojo},
+            async => $async,
+            action => $self->{api_endpoints}->{ $options{method} . '_/internal/' . $3 },
             target => $2,
             data => { 
                 content => $options{content},
                 parameters => $options{parameters},
                 variables => \@variables
-            },
-            log_wait => (defined($options{parameters}->{log_wait})) ? $options{parameters}->{log_wait} : undef,
-            sync_wait => (defined($options{parameters}->{sync_wait})) ? $options{parameters}->{sync_wait} : undef
+            }
         );
     } elsif ($options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?(\w+)\/(\w+)\/(\w+)\/?([\w\/]*?)$/
-        && defined($options{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5})) {
+        && defined($self->{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5})) {
         my @variables = split(/\//, $6);
-        call_action(
-            action => $options{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5},
+        $self->call_action(
+            mojo => $options{mojo},
+            async => $async,
+            action => $self->{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5},
             target => $2,
             data => { 
                 content => $options{content},
@@ -405,17 +466,6 @@ sub api_root {
         $options{mojo}->render(json => { error => 'method_unknown', message => 'Method not implemented' }, status => 200);
         return ;
     }
-
-#    gorgone::standard::library::zmq_send_message(
-#        socket => $connector->{internal_socket},
-#        action => 'CONSTATUS',
-#        token => 'ploptest',
-#        data => {},
-#        json_encode => 1
-#    );
-#    $connector->read_zmq_events();
-
-    #$options{mojo}->render(json => { message => 'ok' });
 }
 
 1;

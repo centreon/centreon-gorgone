@@ -29,6 +29,7 @@ use gorgone::standard::constants qw(:all);
 use constant NAMESPACE => 'core';
 use constant NAME => 'httpserverng';
 use constant EVENTS => [
+    { event => 'HTTPSERVERNGLISTENER' },
     { event => 'HTTPSERVERNGREADY' }
 ];
 
@@ -67,20 +68,8 @@ sub init {
 
 sub routing {
     my (%options) = @_;
-
-    if ($@) {
-        $options{logger}->writeLogError("[httpserverng] Cannot decode json data: $@");
-        gorgone::standard::library::add_history(
-            dbh => $options{dbh},
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            data => { message => 'gorgone-httpserverng: cannot decode json' },
-            json_encode => 1
-        );
-        return undef;
-    }
     
-    if ($options{action} eq 'HTTPSERVERREADY') {
+    if ($options{action} eq 'HTTPSERVERNGREADY') {
         $httpserverng->{ready} = 1;
         return undef;
     }
@@ -95,7 +84,7 @@ sub routing {
         );
         return undef;
     }
-    
+
     gorgone::standard::library::zmq_send_message(
         socket => $options{socket},
         identity => 'gorgone-httpserverng',

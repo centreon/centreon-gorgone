@@ -59,18 +59,6 @@ sub init {
 
 sub routing {
     my (%options) = @_;
-
-    if ($@) {
-        $options{logger}->writeLogError("[audit] Cannot decode json data: $@");
-        gorgone::standard::library::add_history(
-            dbh => $options{dbh},
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            data => { message => 'gorgone-audit: cannot decode json' },
-            json_encode => 1
-        );
-        return undef;
-    }
     
     if ($options{action} eq 'CENTREONAUDITREADY') {
         $audit->{ready} = 1;

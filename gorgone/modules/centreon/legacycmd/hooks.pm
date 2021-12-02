@@ -62,18 +62,6 @@ sub init {
 sub routing {
     my (%options) = @_;
 
-    if ($@) {
-        $options{logger}->writeLogError("[legacycmd] Cannot decode json data: $@");
-        gorgone::standard::library::add_history(
-            dbh => $options{dbh},
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            data => { message => 'gorgone-legacycmd: cannot decode json' },
-            json_encode => 1
-        );
-        return undef;
-    }
-    
     if ($options{action} eq 'LEGACYCMDREADY') {
         $legacycmd->{ready} = 1;
         return undef;

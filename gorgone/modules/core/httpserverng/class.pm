@@ -30,7 +30,6 @@ use gorgone::standard::misc;
 use ZMQ::Constants qw(:all);
 use Mojolicious::Lite;
 use Mojo::Server::Daemon;
-use Mojo::Reactor::EV;
 use IO::Socket::SSL;
 use IO::Handle;
 use JSON::XS;
@@ -224,6 +223,9 @@ sub run {
         app    => app,
         listen => [$proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '?' . $listen]
     );
+    # more than 2 minutes, need to use async system
+    $daemon->inactivity_timeout(120);
+
     #my $loop = Mojo::IOLoop->new();
     #my $reactor = Mojo::Reactor::EV->new();
     #$reactor->io($socket => sub {
@@ -277,7 +279,11 @@ sub read_listener {
 
     push @{$self->{token_watch}->{ $options{token} }->{results}}, $content;
     if ($content->{code} == GORGONE_ACTION_FINISH_KO || $content->{code} == GORGONE_ACTION_FINISH_OK) {
-        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => { data => $self->{token_watch}->{ $options{token} }->{results} });
+        my $json = { data => $self->{token_watch}->{ $options{token} }->{results} };
+        if (defined($self->{token_watch}->{ $options{token} }->{internal}) && $content->{code} == GORGONE_ACTION_FINISH_OK) {
+            $json = $content->{data};
+        }
+        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $json);
         delete $self->{token_watch}->{ $options{token} };
     }
 }
@@ -374,7 +380,8 @@ sub get_log {
     );
     $self->read_zmq_events();
 
-    $options{mojo}->render_later();
+    # keep reference tx to avoid "Transaction already destroyed"
+    $self->{token_watch}->{$token_log}->{tx} = $options{mojo}->render_later()->tx;
 }
 
 sub call_action {
@@ -383,7 +390,11 @@ sub call_action {
     my $action_token = gorgone::standard::library::generate_token();
 
     if ($options{async} == 0) {
-        $self->{token_watch}->{$action_token} = { mojo => $options{mojo}, results => [] };
+        $self->{token_watch}->{$action_token} = {
+            mojo => $options{mojo},
+            internal => $options{internal},
+            results => []
+        };
         $self->send_internal_action(
             action => 'ADDLISTENER',
             data => [
@@ -391,7 +402,9 @@ sub call_action {
                     identity => 'gorgone-httpserverng',
                     event => 'HTTPSERVERNGLISTENER',
                     token => $action_token,
-                    timeout => 120
+                    target => $options{target},
+                    log_pace => 5,
+                    timeout => 110
                 }
             ]
         );
@@ -409,7 +422,8 @@ sub call_action {
     if ($options{async} == 1) {
         $options{mojo}->render(json => { token => $action_token }, status => 200);
     } else {
-        $options{mojo}->render_later();
+        # keep reference tx to avoid "Transaction already destroyed"
+        $self->{token_watch}->{$action_token}->{tx} = $options{mojo}->render_later()->tx;
     }
 }
 
@@ -441,6 +455,7 @@ sub api_root {
             mojo => $options{mojo},
             async => $async,
             action => $self->{api_endpoints}->{ $options{method} . '_/internal/' . $3 },
+            internal => $3,
             target => $2,
             data => { 
                 content => $options{content},
@@ -449,12 +464,12 @@ sub api_root {
             }
         );
     } elsif ($options{uri} =~ /^\/api\/(nodes\/(\w*)\/)?(\w+)\/(\w+)\/(\w+)\/?([\w\/]*?)$/
-        && defined($self->{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5})) {
+        && defined($self->{api_endpoints}->{ $options{method} . '_/' . $3 . '/' . $4 . '/' . $5 })) {
         my @variables = split(/\//, $6);
         $self->call_action(
             mojo => $options{mojo},
             async => $async,
-            action => $self->{api_endpoints}->{$options{method} . '_/' . $3 . '/' . $4 . '/' . $5},
+            action => $self->{api_endpoints}->{ $options{method} . '_/' . $3 . '/' . $4 . '/' . $5 },
             target => $2,
             data => { 
                 content => $options{content},

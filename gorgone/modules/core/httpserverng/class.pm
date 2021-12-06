@@ -61,7 +61,7 @@ websocket '/' => sub {
         tx => $mojo->tx,
         logged => 0,
         last_update => time(),
-        tokens => []
+        tokens => {}
     };
 
     $mojo->on(message => sub {
@@ -80,7 +80,10 @@ websocket '/' => sub {
             return ;
         }
 
-        return unless ($connector->is_logged_websocket(ws_id => $mojo->tx->connection, content => $content));
+        my $rv = $connector->is_logged_websocket(ws_id => $mojo->tx->connection, content => $content);
+        return if ($rv != 1);
+
+        $connector->api_root_ws(ws_id => $mojo->tx->connection, content => $content);
     });
 
     $mojo->on(finish => sub {
@@ -256,7 +259,7 @@ sub run {
         $connector->{logger}->writeLogDebug('[httpserverng] recurring timeout loop');
         my $ctime = time();
         foreach my $ws_id (keys %{$connector->{ws_clients}}) {
-            if (scalar(@{$connector->{ws_clients}->{$ws_id}->{tokens}}) <= 0 && ($ctime - $connector->{ws_clients}->{$ws_id}->{last_update}) > 10) {
+            if (scalar(keys %{$connector->{ws_clients}->{$ws_id}->{tokens}}) <= 0 && ($ctime - $connector->{ws_clients}->{$ws_id}->{last_update}) > 300) {
                 $connector->{logger}->writeLogDebug('[httpserverng] websocket client timeout reached: ' . $ws_id);
                 $connector->close_websocket(
                     code => 500,
@@ -330,12 +333,23 @@ sub read_listener {
     }
 
     push @{$self->{token_watch}->{ $options{token} }->{results}}, $content;
+    if (defined($self->{token_watch}->{ $options{token} }->{ws_id})) {
+        $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{last_update} = time();
+    }
+
     if ($content->{code} == GORGONE_ACTION_FINISH_KO || $content->{code} == GORGONE_ACTION_FINISH_OK) {
         my $json = { data => $self->{token_watch}->{ $options{token} }->{results} };
         if (defined($self->{token_watch}->{ $options{token} }->{internal}) && $content->{code} == GORGONE_ACTION_FINISH_OK) {
             $json = $content->{data};
         }
-        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $json);
+
+        if (defined($self->{token_watch}->{ $options{token} }->{ws_id})) {
+            $json->{userdata} = $self->{token_watch}->{ $options{token} }->{userdata};
+            $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tx}->send({json => $json });
+            delete $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tokens}->{ $options{token} };
+        } else {
+            $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $json);
+        }
         delete $self->{token_watch}->{ $options{token} };
     }
 }
@@ -420,7 +434,7 @@ sub get_log {
     my $token_log = $options{token} . '-log';
 
     if (defined($options{ws_id})) {
-        push @{$self->{ws_clients}->{tokens}}, $token_log;
+        $self->{ws_clients}->{ $options{ws_id} }->{tokens}->{$token_log} = 1;
     }
     $self->{token_watch}->{$token_log} = {
         ws_id => $options{ws_id},
@@ -451,7 +465,7 @@ sub call_action {
 
     if ($options{async} == 0) {
         if (defined($options{ws_id})) {
-            push @{$self->{ws_clients}->{tokens}}, $action_token;
+            $self->{ws_clients}->{ $options{ws_id} }->{tokens}->{$action_token} = 1;
         }
         $self->{token_watch}->{$action_token} = {
             ws_id => $options{ws_id},
@@ -521,7 +535,7 @@ sub is_logged_websocket {
     }
 
     $self->{ws_clients}->{ $options{ws_id} }->{logged} = 1;
-    return 1;
+    return 2;
 }
 
 sub clean_websocket {
@@ -549,7 +563,71 @@ sub close_websocket {
 sub api_root_ws {
     my ($self, %options) = @_;
 
-    
+    use Data::Dumper; print Data::Dumper::Dumper($options{content});
+
+    if (!defined($options{content}->{method})) {
+        $self->{ws_clients}->{ $options{ws_id} }->{tx}->send({json => {
+            code => 500,
+            message  => 'unknown method',
+            userdata => $options{content}->{userdata}
+        }});
+        return ;
+    }
+    if (!defined($options{content}->{uri})) {
+        $self->{ws_clients}->{ $options{ws_id} }->{tx}->send({json => {
+            code => 500,
+            message  => 'unknown uri',
+            userdata => $options{content}->{userdata}
+        }});
+        return ;
+    }
+
+    $self->{logger}->writeLogInfo("[api] Requesting '" . $options{content}->{uri} . "' [" . $options{content}->{method} . "]");
+
+    if ($options{content}->{method} eq 'GET' && $options{content}->{uri} =~ /^\/api\/log\/?$/) {
+        $self->get_log(
+            ws_id => $options{ws_id},
+            userdata => $options{content}->{userdata},
+            target => $options{target},
+            token => $options{content}->{token},
+            parameters => $options{content}->{parameters}
+        );
+    } elsif ($options{content}->{uri} =~ /^\/internal\/(\w+)\/?$/
+        && defined($self->{api_endpoints}->{ $options{content}->{method} . '_/internal/' . $1 })) {
+        $self->call_action(
+            ws_id => $options{ws_id},
+            userdata => $options{content}->{userdata},
+            async => 0,
+            action => $self->{api_endpoints}->{ $options{content}->{method} . '_/internal/' . $1 },
+            internal => $1,
+            target => $options{target},
+            data => { 
+                content => $options{content}->{data},
+                parameters => $options{content}->{parameters},
+                variables => $options{content}->{variable}
+            }
+        );
+    } elsif ($options{content}->{uri} =~ /^\/(\w+)\/(\w+)\/(\w+)\/?$/
+        && defined($self->{api_endpoints}->{ $options{content}->{method} . '_/' . $1 . '/' . $2 . '/' . $3 })) {
+        $self->call_action(
+            ws_id => $options{ws_id},
+            userdata => $options{content}->{userdata},
+            async => 0,
+            action => $self->{api_endpoints}->{ $options{content}->{method} . '_/' . $1 . '/' . $2 . '/' . $3 },
+            target => $options{target},
+            data => { 
+                content => $options{content}->{data},
+                parameters => $options{content}->{parameters},
+                variables => $options{content}->{variable}
+            }
+        );
+    } else {
+        $self->{ws_clients}->{ $options{ws_id} }->{tx}->send({json => {
+            code => 500,
+            message  => 'method not implemented',
+            userdata => $options{userdata}
+        }});
+    }
 }
 
 sub api_root {

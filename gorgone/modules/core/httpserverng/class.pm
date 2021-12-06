@@ -86,8 +86,8 @@ websocket '/' => sub {
     $mojo->on(finish => sub {
         my ($mojo, $code, $reason) = @_;
 
-        print "Client disconnected: $code\n";
-        delete $connector->{clients}->{ $mojo->tx->connection };
+        $connector->{logger}->writeLogDebug('[httpserverng] websocket client disconnected: ' . $mojo->tx->connection);
+        $connector->clean_websocket(ws_id => $mojo->tx->connection);
     });
 };
 
@@ -251,6 +251,21 @@ sub run {
         $connector->read_zmq_events();
     });
     Mojo::IOLoop->singleton->reactor->watch($socket, 1, 0);
+
+    Mojo::IOLoop->singleton->recurring(60 => sub {
+        $connector->{logger}->writeLogDebug('[httpserverng] recurring timeout loop');
+        my $ctime = time();
+        foreach my $ws_id (keys %{$connector->{ws_clients}}) {
+            if (scalar(@{$connector->{ws_clients}->{$ws_id}->{tokens}}) <= 0 && ($ctime - $connector->{ws_clients}->{$ws_id}->{last_update}) > 10) {
+                $connector->{logger}->writeLogDebug('[httpserverng] websocket client timeout reached: ' . $ws_id);
+                $connector->close_websocket(
+                    code => 500,
+                    message  => 'timeout reached',
+                    ws_id => $ws_id
+                );
+            }
+        }
+    });
 
     app->mode('production');
     my $daemon = Mojo::Server::Daemon->new(
@@ -509,6 +524,18 @@ sub is_logged_websocket {
     return 1;
 }
 
+sub clean_websocket {
+    my ($self, %options) = @_;
+
+    return if (!defined($self->{ws_clients}->{ $options{ws_id} }));
+
+    $self->{ws_clients}->{ $options{ws_id} }->{tx}->finish();
+    foreach (@{$self->{ws_clients}->{ $options{ws_id} }->{tokens}}) {
+        delete $self->token_watch->{$_};
+    }
+    delete $self->{ws_clients}->{ $options{ws_id} };
+}
+
 sub close_websocket {
     my ($self, %options) = @_;
 
@@ -516,11 +543,7 @@ sub close_websocket {
         code => $options{code},
         message  => $options{message}
     }});
-    $self->{ws_clients}->{ $options{ws_id} }->{tx}->finish();
-    foreach (@{$self->{ws_clients}->{ $options{ws_id} }->{tokens}}) {
-        delete $self->token_watch->{$_};
-    }
-    delete $self->{ws_clients}->{ $options{ws_id} };
+    $self->clean_websocket(ws_id => $options{ws_id});
 }
 
 sub api_root_ws {

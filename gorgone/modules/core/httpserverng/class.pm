@@ -31,6 +31,7 @@ use ZMQ::Constants qw(:all);
 use ZMQ::LibZMQ4;
 use Mojolicious::Lite;
 use Mojo::Server::Daemon;
+use Authen::Simple::Password;
 use IO::Socket::SSL;
 use IO::Handle;
 use JSON::XS;
@@ -40,25 +41,46 @@ my ($connector);
 
 plugin('basic_auth_plus');
 
-=pod
-websocket '/echo' => sub {
+websocket '/' => sub {
     my $mojo = shift;
 
-    print sprintf("Client connected: %s\n", $mojo->tx->connection);
-    my $ws_id = sprintf("%s", $mojo->tx->connection);
-    $connector->{clients}->{$ws_id} = $mojo->tx;
+    $connector->{logger}->writeLogDebug('[httpserverng] websocket client connected: ' . $mojo->tx->connection);
+
+    if ($connector->{allowed_hosts_enabled} == 1) {
+        if ($connector->check_allowed_host(peer_addr => $mojo->tx->remote_address) == 0) {
+            $connector->{logger}->writeLogError("[httpserverng] " . $mojo->tx->remote_address . " Unauthorized");
+            $mojo->tx->send({json => {
+                code => 401,
+                message  => 'unauthorized',
+            }});
+            return ;
+        }
+    }
+
+    $connector->{ws_clients}->{ scalar($mojo->tx->connection) } = {
+        tx => $mojo->tx,
+        logged => 0,
+        last_update => time(),
+        tokens => []
+    };
 
     $mojo->on(message => sub {
-        my ($self, $msg) = @_;
+        my ($mojo, $msg) = @_;
 
-        my $dt   = DateTime->now(time_zone => 'Asia/Tokyo');
-
-        for (keys %{$self->{clients}}) {
-            $connector->{clients}->{$_}->send({json => {
-                hms  => $dt->hms,
-                text => $msg,
-            }});
+        my $content;
+        eval {
+            $content = JSON::XS->new->utf8->decode($msg);
+        };
+        if ($@) {
+            $connector->close_websocket(
+                code => 500,
+                message  => 'decode error: unsupported format',
+                ws_id => $mojo->tx->connection
+            );
+            return ;
         }
+
+        return unless ($connector->is_logged_websocket(ws_id => $mojo->tx->connection, content => $content));
     });
 
     $mojo->on(finish => sub {
@@ -68,7 +90,6 @@ websocket '/echo' => sub {
         delete $connector->{clients}->{ $mojo->tx->connection };
     });
 };
-=cut
 
 patch '/*' => sub {
     my $mojo = shift;
@@ -107,6 +128,7 @@ sub construct {
     $connector->{allowed_hosts_enabled} = (defined($connector->{config}->{allowed_hosts}->{enabled}) && $connector->{config}->{allowed_hosts}->{enabled} eq 'true') ? 1 : 0;
     $connector->{clients} = {};
     $connector->{token_watch} = {};
+    $connector->{ws_clients} = {};
 
     if (gorgone::standard::misc::mymodule_load(
             logger => $connector->{logger},
@@ -381,7 +403,15 @@ sub get_log {
     }
 
     my $token_log = $options{token} . '-log';
-    $self->{token_watch}->{$token_log} = { mojo => $options{mojo} };
+
+    if (defined($options{ws_id})) {
+        push @{$self->{ws_clients}->{tokens}}, $token_log;
+    }
+    $self->{token_watch}->{$token_log} = {
+        ws_id => $options{ws_id},
+        userdata => $options{userdata},
+        mojo => $options{mojo}
+    };
 
     gorgone::standard::library::zmq_send_message(
         socket => $self->{internal_socket},
@@ -396,7 +426,7 @@ sub get_log {
     $self->read_zmq_events();
 
     # keep reference tx to avoid "Transaction already destroyed"
-    $self->{token_watch}->{$token_log}->{tx} = $options{mojo}->render_later()->tx;
+    $self->{token_watch}->{$token_log}->{tx} = $options{mojo}->render_later()->tx if (!defined($options{ws_id}));
 }
 
 sub call_action {
@@ -405,11 +435,17 @@ sub call_action {
     my $action_token = gorgone::standard::library::generate_token();
 
     if ($options{async} == 0) {
+        if (defined($options{ws_id})) {
+            push @{$self->{ws_clients}->{tokens}}, $action_token;
+        }
         $self->{token_watch}->{$action_token} = {
+            ws_id => $options{ws_id},
+            userdata => $options{userdata},
             mojo => $options{mojo},
             internal => $options{internal},
             results => []
         };
+
         $self->send_internal_action(
             action => 'ADDLISTENER',
             data => [
@@ -438,8 +474,59 @@ sub call_action {
         $options{mojo}->render(json => { token => $action_token }, status => 200);
     } else {
         # keep reference tx to avoid "Transaction already destroyed"
-        $self->{token_watch}->{$action_token}->{tx} = $options{mojo}->render_later()->tx;
+        $self->{token_watch}->{$action_token}->{tx} = $options{mojo}->render_later()->tx if (!defined($options{ws_id}));
     }
+}
+
+sub is_logged_websocket {
+    my ($self, %options) = @_;
+
+    return 1 if ($self->{ws_clients}->{ $options{ws_id} }->{logged} == 1);
+
+    if ($self->{auth_enabled} == 1) {
+        if (!defined($options{content}->{username}) || $options{content}->{username} eq '' ||
+            !defined($options{content}->{password}) || $options{content}->{password} eq '') {
+            $self->close_websocket(
+                code => 500,
+                message  => 'please set username/password',
+                ws_id => $options{ws_id}
+            );
+            return 0;
+        }
+
+        unless ($options{content}->{username} eq $self->{config}->{auth}->{user} &&
+            Authen::Simple::Password->check($options{content}->{password}, $self->{config}->{auth}->{password})) {
+            $self->close_websocket(
+                code => 401,
+                message  => 'unauthorized user',
+                ws_id => $options{ws_id}
+            );
+            return 0;
+        }
+    }
+
+    $self->{ws_clients}->{ $options{ws_id} }->{logged} = 1;
+    return 1;
+}
+
+sub close_websocket {
+    my ($self, %options) = @_;
+
+    $self->{ws_clients}->{ $options{ws_id} }->{tx}->send({json => {
+        code => $options{code},
+        message  => $options{message}
+    }});
+    $self->{ws_clients}->{ $options{ws_id} }->{tx}->finish();
+    foreach (@{$self->{ws_clients}->{ $options{ws_id} }->{tokens}}) {
+        delete $self->token_watch->{$_};
+    }
+    delete $self->{ws_clients}->{ $options{ws_id} };
+}
+
+sub api_root_ws {
+    my ($self, %options) = @_;
+
+    
 }
 
 sub api_root {

@@ -3,8 +3,9 @@ use warnings;
 use Mojo::UserAgent;
 
 my $ua = Mojo::UserAgent->new();
+# ws or wss
 $ua->websocket(
-    'wss://127.0.0.1:3000/echo' => sub {
+    'ws://127.0.0.1:3000/' => sub {
         my ($ua, $tx) = @_;
 
         print "error: ", $tx->res->error->{message}, "\n" if $tx->res->error;
@@ -23,9 +24,11 @@ $ua->websocket(
                 #$tx->finish;
             }
         );
+
         $tx->send('Hi!');
     }
 );
+$ua->inactivity_timeout(120);
 Mojo::IOLoop->start() unless (Mojo::IOLoop->is_running);
 
 exit(0);

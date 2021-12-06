@@ -315,7 +315,13 @@ sub read_log_event {
         }
     }
 
-    $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $response);
+    if (defined($self->{token_watch}->{ $options{token} }->{ws_id})) {
+        $response->{userdata} = $self->{token_watch}->{ $options{token} }->{userdata};
+        $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tx}->send({json => $response });
+        delete $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tokens}->{ $options{token} };
+    } else {
+        $self->{token_watch}->{ $options{token} }->{mojo}->render(json => $response);
+    }
     delete $self->{token_watch}->{ $options{token} };
 }
 

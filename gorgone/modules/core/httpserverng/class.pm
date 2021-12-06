@@ -57,7 +57,7 @@ websocket '/' => sub {
         }
     }
 
-    $connector->{ws_clients}->{ scalar($mojo->tx->connection) } = {
+    $connector->{ws_clients}->{ $mojo->tx->connection } = {
         tx => $mojo->tx,
         logged => 0,
         last_update => time(),
@@ -66,6 +66,8 @@ websocket '/' => sub {
 
     $mojo->on(message => sub {
         my ($mojo, $msg) = @_;
+
+        $connector->{ws_clients}->{ $mojo->tx->connection }->{last_update} = time();
 
         my $content;
         eval {
@@ -90,7 +92,7 @@ websocket '/' => sub {
         my ($mojo, $code, $reason) = @_;
 
         $connector->{logger}->writeLogDebug('[httpserverng] websocket client disconnected: ' . $mojo->tx->connection);
-        $connector->clean_websocket(ws_id => $mojo->tx->connection);
+        $connector->clean_websocket(ws_id => $mojo->tx->connection, finish => 1);
     });
 };
 
@@ -317,6 +319,7 @@ sub read_log_event {
 
     if (defined($self->{token_watch}->{ $options{token} }->{ws_id})) {
         $response->{userdata} = $self->{token_watch}->{ $options{token} }->{userdata};
+        $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{last_update} = time();
         $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tx}->send({json => $response });
         delete $self->{ws_clients}->{ $self->{token_watch}->{ $options{token} }->{ws_id} }->{tokens}->{ $options{token} };
     } else {
@@ -549,9 +552,9 @@ sub clean_websocket {
 
     return if (!defined($self->{ws_clients}->{ $options{ws_id} }));
 
-    $self->{ws_clients}->{ $options{ws_id} }->{tx}->finish();
-    foreach (@{$self->{ws_clients}->{ $options{ws_id} }->{tokens}}) {
-        delete $self->token_watch->{$_};
+    $self->{ws_clients}->{ $options{ws_id} }->{tx}->finish() if (!defined($options{finish}));
+    foreach (keys %{$self->{ws_clients}->{ $options{ws_id} }->{tokens}}) {
+        delete $self->{token_watch}->{$_};
     }
     delete $self->{ws_clients}->{ $options{ws_id} };
 }

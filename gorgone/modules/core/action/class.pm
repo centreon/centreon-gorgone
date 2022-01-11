@@ -152,6 +152,53 @@ sub get_package_manager {
     }
 }
 
+sub validate_plugins_rpm {
+    my ($self, %options) = @_;
+
+    print "====ICI====LA====\n";
+    return 0;
+}
+
+sub validate_plugins {
+    my ($self, %options) = @_;
+
+    my ($rv, $message, $content) = gorgone::standard::misc::slurp(file => $options{file});
+    return (1, $message) if (!$rv);
+
+    my $plugins;
+    eval {
+        $plugins = JSON::XS->new->utf8->decode($content);
+    };
+    if ($@) {
+        return (1, 'cannot decode json');
+    }
+
+    # nothing to validate
+    if (ref($plugins) ne 'HASH' || scalar(keys %$plugins) <= 0) {
+        return 0;
+    }
+
+    if ($self->{package_manager} eq 'rpm') {
+        ($rv, $message) = $self->validate_plugins_rpm(plugins => $plugins);
+    } else {
+        ($rv, $message) = (1, 'validate plugins - unsupported operating system');
+    }
+
+    return ($rv, $message);
+}
+
+sub is_command_authorized {
+    my ($self, %options) = @_;
+
+    return 0 if ($self->{whitelist_cmds} == 0);
+
+    foreach my $regexp (@{$self->{allowed_cmds}}) {
+        return 0 if ($options{command} =~ /$regexp/);
+    }
+
+    return 1;
+}
+
 sub action_command {
     my ($self, %options) = @_;
     
@@ -162,7 +209,7 @@ sub action_command {
             token => $options{token},
             logging => $options{data}->{logging},
             data => {
-                message => "expected array, found '" . ref($options{data}->{content}) . "'",
+                message => "expected array, found '" . ref($options{data}->{content}) . "'"
             }
         );
         return -1;
@@ -177,34 +224,24 @@ sub action_command {
                 token => $options{token},
                 logging => $options{data}->{logging},
                 data => {
-                    message => "need command argument at array index '" . $index . "'",
+                    message => "need command argument at array index '" . $index . "'"
                 }
             );
             return -1;
         }
 
-        if ($self->{whitelist_cmds} == 1) {
-            my $matched = 0;
-            foreach my $regexp (@{$self->{allowed_cmds}}) {
-                if ($command->{command} =~ /$regexp/) {
-                    $matched = 1;
-                    last;
+        if ($self->is_command_authorized(command => $command->{command})) {
+            $self->{logger}->writeLogInfo("[action] command not allowed (whitelist): " . $command->{command});
+            $self->send_log(
+                socket => $options{socket_log},
+                code => GORGONE_ACTION_FINISH_KO,
+                token => $options{token},
+                logging => $options{data}->{logging},
+                data => {
+                    message => "command not allowed (whitelist) at array index '" . $index . "'"
                 }
-            }
-
-            if ($matched == 0) {
-                $self->{logger}->writeLogInfo("[action] command not allowed (whitelist): " . $command->{command});
-                $self->send_log(
-                    socket => $options{socket_log},
-                    code => GORGONE_ACTION_FINISH_KO,
-                    token => $options{token},
-                    logging => $options{data}->{logging},
-                    data => {
-                        message => "command not allowed (whitelist) at array index '" . $index . "'",
-                    }
-                );
-                return -1;
-            }
+            );
+            return -1;
         }
 
         $index++;
@@ -456,7 +493,70 @@ sub action_actionengine {
             token => $options{token},
             logging => $options{data}->{logging},
             data => {
-                message => "need valid command argument",
+                message => "need valid command argument"
+            }
+        );
+        return -1;
+    }
+
+    if ($self->is_command_authorized(command => $options{data}->{content}->{command})) {
+        $self->{logger}->writeLogInfo("[action] command not allowed (whitelist): " . $options{data}->{content}->{command});
+        $self->send_log(
+            socket => $options{socket_log},
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            logging => $options{data}->{logging},
+            data => {
+                message => 'command not allowed (whitelist)'
+            }
+        );
+        return -1;
+    }
+
+    if (defined($options{data}->{content}->{plugins}) && $options{data}->{content}->{plugins} ne '') {
+        my ($rv, $message) = $self->validate_plugins(file => $options{data}->{content}->{plugins});
+        if ($rv) {
+            $self->{logger}->writeLogError("[action] $message");
+            $self->send_log(
+                socket => $options{socket_log},
+                code => GORGONE_ACTION_FINISH_KO,
+                token => $options{token},
+                logging => $options{data}->{logging},
+                data => {
+                    message => $message
+                }
+            );
+            return -1;
+        }
+    }
+
+    my $start = time();
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => $options{data}->{content}->{command},
+        timeout => $self->{command_timeout},
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $self->{logger}
+    );
+    my $end = time();
+    if ($error != 0) {
+        $self->send_log(
+            socket => $options{socket_log},
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            logging => $options{data}->{logging},
+            data => {
+                message => "command execution issue",
+                command => $options{data}->{content}->{command},
+                result => {
+                    exit_code => $return_code,
+                    stdout => $stdout
+                },
+                metrics => {
+                    start => $start,
+                    end => $end,
+                    duration => $end - $start
+                }
             }
         );
         return -1;
@@ -468,7 +568,7 @@ sub action_actionengine {
         token => $options{token},
         logging => $options{data}->{logging},
         data => {
-            message => "commands processing has finished successfully"
+            message => 'actionengine has finished successfully'
         }
     );
 

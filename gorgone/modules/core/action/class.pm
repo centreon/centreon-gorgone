@@ -515,10 +515,6 @@ sub create_child {
         return undef;
     }
 
-    $connector->{engine_childs} = {};
-    $connector->{max_concurrent_engine} = defined($connector->{config}->{max_concurrent_engine}) ?
-        $connector->{config}->{max_concurrent_engine} : 3;
-
     if ($options{action} eq 'ACTIONENGINE') {
         my $num = scalar(keys %{$self->{engine_childs}});
         if ($num > $self->{max_concurrent_engine}) {

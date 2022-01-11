@@ -33,6 +33,7 @@ use JSON::XS;
 use File::Basename;
 use File::Copy;
 use File::Path qw(make_path);
+use POSIX ":sys_wait_h";
 use MIME::Base64;
 use Digest::MD5::File qw(file_md5_hex);
 use Archive::Tar;
@@ -41,7 +42,7 @@ use Fcntl;
 $Archive::Tar::SAME_PERMISSIONS = 1;
 $Archive::Tar::WARN = 0;
 $Digest::MD5::File::NOFATALS = 1;
-my %handlers = (TERM => {}, HUP => {});
+my %handlers = (TERM => {}, HUP => {}, CHLD => {});
 my ($connector);
 
 sub new {
@@ -59,7 +60,12 @@ sub new {
     $connector->{allowed_cmds} = $connector->{config}->{allowed_cmds}
         if (defined($connector->{config}->{allowed_cmds}) && ref($connector->{config}->{allowed_cmds}) eq 'ARRAY');
 
-    $connector->set_signal_handlers;
+    $connector->{return_childs} = {};
+    $connector->{engine_childs} = {};
+    $connector->{max_concurrent_engine} = defined($connector->{config}->{max_concurrent_engine}) ?
+        $connector->{config}->{max_concurrent_engine} : 3;
+
+    $connector->set_signal_handlers();
     return $connector;
 }
 
@@ -70,6 +76,8 @@ sub set_signal_handlers {
     $handlers{TERM}->{$self} = sub { $self->handle_TERM() };
     $SIG{HUP} = \&class_handle_HUP;
     $handlers{HUP}->{$self} = sub { $self->handle_HUP() };
+    $SIG{CHLD} = \&class_handle_CHLD;
+    $handlers{CHLD}->{$self} = sub { $self->handle_CHLD() };
 }
 
 sub handle_HUP {
@@ -83,6 +91,18 @@ sub handle_TERM {
     $self->{stop} = 1;
 }
 
+sub handle_CHLD {
+    my $self = shift;
+    my $child_pid;
+
+    while (($child_pid = waitpid(-1, &WNOHANG)) > 0) {
+        $self->{logger}->writeLogDebug("[action] Received SIGCLD signal (pid: $child_pid)");
+        $self->{return_child}->{$child_pid} = 1;
+    }
+
+    $SIG{CHLD} = \&class_handle_CHLD;
+}
+
 sub class_handle_TERM {
     foreach (keys %{$handlers{TERM}}) {
         &{$handlers{TERM}->{$_}}();
@@ -92,6 +112,43 @@ sub class_handle_TERM {
 sub class_handle_HUP {
     foreach (keys %{$handlers{HUP}}) {
         &{$handlers{HUP}->{$_}}();
+    }
+}
+
+sub class_handle_CHLD {
+    foreach (keys %{$handlers{CHLD}}) {
+        &{$handlers{CHLD}->{$_}}();
+    }
+}
+
+sub check_childs {
+    my ($self, %options) = @_;
+
+    foreach (keys %{$self->{return_child}}) {
+        delete $self->{engine_childs}->{$_} if (defined($self->{engine_childs}->{$_}));
+    }
+
+    $self->{return_child} = {};
+}
+
+sub get_package_manager {
+    my ($self, %options) = @_;
+
+    $self->{package_manager} = 'unknown';
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'lsb_release -a',
+        timeout => 5,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $options{logger}
+    );
+    if ($error == 0 && $stdout =~ /^Description:\s+(.*)$/mi) {
+        my $os = $1;
+        if ($os =~ /Debian|Ubuntu/i) {
+            $self->{package_manager} = 'deb';
+        } elsif ($os =~ /CentOS|Redhat/i) {
+            $self->{package_manager} = 'rpm';
+        }
     }
 }
 
@@ -378,6 +435,46 @@ sub action_processcopy {
     return 0;
 }
 
+sub action_actionengine {
+    my ($self, %options) = @_;
+
+    if (!defined($options{data}->{content}) || $options{data}->{content} eq '') {
+        $self->send_log(
+            socket => $options{socket_log},
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            logging => $options{data}->{logging},
+            data => { message => 'no content' }
+        );
+        return -1;
+    }
+
+    if (!defined($options{data}->{content}->{command})) {
+        $self->send_log(
+            socket => $options{socket_log},
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            logging => $options{data}->{logging},
+            data => {
+                message => "need valid command argument",
+            }
+        );
+        return -1;
+    }
+
+    $self->send_log(
+        socket => $options{socket_log},
+        code => GORGONE_ACTION_FINISH_OK,
+        token => $options{token},
+        logging => $options{data}->{logging},
+        data => {
+            message => "commands processing has finished successfully"
+        }
+    );
+
+    return 0;
+}
+
 sub action_run {
     my ($self, %options) = @_;
     
@@ -392,6 +489,8 @@ sub action_run {
 
     if ($options{action} eq 'COMMAND') {
         $self->action_command(%options, socket_log => $socket_log);
+    } elsif ($options{action} eq 'ACTIONENGINE') {
+        $self->action_actionengine(%options, socket_log => $socket_log);
     } else {
         $self->send_log(
             socket => $socket_log,
@@ -416,6 +515,23 @@ sub create_child {
         return undef;
     }
 
+    $connector->{engine_childs} = {};
+    $connector->{max_concurrent_engine} = defined($connector->{config}->{max_concurrent_engine}) ?
+        $connector->{config}->{max_concurrent_engine} : 3;
+
+    if ($options{action} eq 'ACTIONENGINE') {
+        my $num = scalar(keys %{$self->{engine_childs}});
+        if ($num > $self->{max_concurrent_engine}) {
+            $self->{logger}->writeLogInfo("[action] max_concurrent_engine limit reached ($num/$self->{max_concurrent_engine})");
+            $self->send_log(
+                code => GORGONE_ACTION_FINISH_KO,
+                token => $options{token},
+                data => { message => "max_concurrent_engine limit reached ($num/$self->{max_concurrent_engine})" }
+            );
+            return undef;
+        }
+    }
+
     $self->{logger}->writeLogDebug("[action] Create sub-process");
     my $child_pid = fork();
     if (!defined($child_pid)) {
@@ -431,6 +547,10 @@ sub create_child {
     if ($child_pid == 0) {
         $self->action_run(action => $options{action}, token => $options{token}, data => $options{data});
         exit(0);
+    } else {
+        if ($options{action} eq 'ACTIONENGINE') {
+            $self->{engine_childs}->{$child_pid} = 1;
+        }
     }
 }
 
@@ -481,8 +601,13 @@ sub run {
             callback => \&event,
         }
     ];
+
+    $self->get_package_manager();
+
     while (1) {
         my $rev = scalar(zmq_poll($self->{poll}, 5000));
+        $self->check_childs();
+
         if ($rev == 0 && $self->{stop} == 1) {
             $self->{logger}->writeLogInfo("[action] $$ has quit");
             zmq_close($connector->{internal_socket});

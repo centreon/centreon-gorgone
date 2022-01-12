@@ -253,6 +253,7 @@ sub validate_plugins {
     if ($self->{package_manager} eq 'rpm') {
         ($rv, $message) = $self->validate_plugins_rpm(plugins => $plugins);
     } else {
+        # for debian/ubuntu: apt-get install centreon-plugin-test=version1 centreon-plugin-test=version2
         ($rv, $message) = (1, 'validate plugins - unsupported operating system');
     }
 

@@ -194,7 +194,7 @@ sub check_plugins_rpm {
 sub install_plugins {
     my ($self, %options) = @_;
 
-    $self->{logger}->writeLogInfo("[action] validate plugins - install " . join(' ', @$installed));
+    $self->{logger}->writeLogInfo("[action] validate plugins - install " . join(' ', @{$options{installed}}));
     my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
         command => 'sudo',
         arguments => ['/usr/local/bin/gorgone_install_plugins.pl', @{$options{installed}}],
@@ -218,7 +218,7 @@ sub validate_plugins_rpm {
     return 0 if ($rv == 0);
 
     if ($rv == 1) {
-        (rv, $message) = $self->install_plugins(installed => $installed);
+        ($rv, $message) = $self->install_plugins(installed => $installed);
         return ($rv, $message) if ($rv == -1);
     }
 

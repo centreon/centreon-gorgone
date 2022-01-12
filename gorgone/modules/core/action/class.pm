@@ -152,10 +152,82 @@ sub get_package_manager {
     }
 }
 
+sub check_plugins_rpm {
+    my ($self, %options) = @_;
+
+    #rpm -q centreon-plugin-Network-Microsens-G6-Snmp test centreon-plugin-Network-Generic-Bluecoat-Snmp
+    #centreon-plugin-Network-Microsens-G6-Snmp-20211228-150846.el7.centos.noarch
+    #package test is not installed
+    #centreon-plugin-Network-Generic-Bluecoat-Snmp-20211102-130335.el7.centos.noarch
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'rpm',
+        arguments => ['-q', keys %{$options{plugins}}],
+        timeout => 60,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $self->{logger}
+    );
+    if ($error != 0) {
+        return (-1, 'check rpm plugins command issue: ' . $stdout);
+    }
+
+    my $installed = [];
+    foreach my $package_name (keys %{$options{plugins}}) {
+        if ($stdout =~ /^$package_name-(\d+)-/m) {
+            my $current_version = $1;
+            if ($current_version < $options{plugins}->{$package_name}) {
+                push @$installed, $package_name . '-' . $options{plugins}->{$package_name};
+            }
+        } else {
+            push @$installed, $package_name . '-' . $options{plugins}->{$package_name};
+        }
+    }
+
+    if (scalar(@$installed) > 0) {
+        return (1, 'install', $installed);
+    }
+
+    $self->{logger}->writeLogInfo("[action] validate plugins - nothing to install");
+    return 0;
+}
+
+sub install_plugins {
+    my ($self, %options) = @_;
+
+    $self->{logger}->writeLogInfo("[action] validate plugins - install " . join(' ', @$installed));
+    my ($error, $stdout, $return_code) = gorgone::standard::misc::backtick(
+        command => 'sudo',
+        arguments => ['/usr/local/bin/gorgone_install_plugins.pl', @{$options{installed}}],
+        timeout => 300,
+        wait_exit => 1,
+        redirect_stderr => 1,
+        logger => $self->{logger}
+    );
+    if ($error != 0) {
+        return (-1, 'install plugins command issue: ' . $stdout);
+    }
+
+    return 0;
+}
+
 sub validate_plugins_rpm {
     my ($self, %options) = @_;
 
-    print "====ICI====LA====\n";
+    my ($rv, $message, $installed) = $self->check_plugins_rpm(%options);
+    return ($rv, $message) if ($rv == -1);
+    return 0 if ($rv == 0);
+
+    if ($rv == 1) {
+        (rv, $message) = $self->install_plugins(installed => $installed);
+        return ($rv, $message) if ($rv == -1);
+    }
+
+    ($rv, $message, $installed) = $self->check_plugins_rpm(%options);
+    return ($rv, $message) if ($rv == -1);
+    if ($rv == 1) {
+        $self->{logger}->writeLogError("[action] validate plugins - still some to install: " . join(' ', @$installed));
+    }
+
     return 0;
 }
 
@@ -173,7 +245,7 @@ sub validate_plugins {
         return (1, 'cannot decode json');
     }
 
-    # nothing to validate
+    # nothing to validate. so it's ok, show must go on!! :)
     if (ref($plugins) ne 'HASH' || scalar(keys %$plugins) <= 0) {
         return 0;
     }

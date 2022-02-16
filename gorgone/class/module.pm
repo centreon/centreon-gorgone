@@ -29,6 +29,8 @@ use gorgone::standard::misc;
 use gorgone::class::tpapi;
 use JSON::XS;
 use Crypt::Mode::CBC;
+use ZMQ::LibZMQ4;
+use ZMQ::Constants qw(:all);
 
 my %handlers = (DIE => {});
 
@@ -53,8 +55,8 @@ sub new {
         $self->{cipher} = Crypt::Mode::CBC->new($self->{config_core}->{internal_com_cipher}, $self->{config_core}->{internal_com_padding});
 
         $self->{internal_crypt} = {
-            enabled = 1,
-            rotation => $self->{config_core}->{internal_com_rotation}
+            enabled => 1,
+            rotation => $self->{config_core}->{internal_com_rotation},
             cipher => $self->{config_core}->{internal_com_cipher},
             padding => $self->{config_core}->{internal_com_padding},
             iv => $self->{config_core}->{internal_com_iv},
@@ -116,7 +118,8 @@ sub send_internal_key {
 
     my $message = gorgone::standard::library::build_protocol(
         action => 'SETMODULEKEY',
-        data => { key => $key }
+        data => { key => unpack('H*', $options{key}) },
+        json_encode => 1
     );
     eval {
         $message = $self->{cipher}->encrypt($message, $options{encrypt_key}, $self->{internal_crypt}->{iv});
@@ -126,6 +129,7 @@ sub send_internal_key {
         return -1;
     }
 
+    zmq_sendmsg($options{socket}, $message, ZMQ_DONTWAIT);
     return 0;
 }
 
@@ -144,18 +148,18 @@ sub send_internal_action {
     }
 
     my $socket = defined($options{socket}) ? $options{socket} : $self->{internal_socket};
-    if (defined($options{internal_crypt}) && $options{internal_crypt}->{enabled} == 1) {
+    if ($self->{internal_crypt}->{enabled} == 1) {
         my $identity = gorgone::standard::library::zmq_get_routing_id(socket => $socket);
 
-        if (!defined($self->{internal_crypt}->{identity_keys}->{ $options{identity} })) {
+        if (!defined($self->{internal_crypt}->{identity_keys}->{$identity})) {
             my ($rv, $key) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
-            ($rv) = $self->send_internal_key(socket => $socket, key => $keys, encrypt_key => $self->{internal_crypt}->{core_key});
+            ($rv) = $self->send_internal_key(socket => $socket, key => $key, encrypt_key => $self->{internal_crypt}->{core_key});
             return undef if ($rv == -1);
-            $self->{internal_crypt}->{identity_keys}->{ $options{identity} } = $key;
+            $self->{internal_crypt}->{identity_keys}->{$identity} = $key;
         }
 
         eval {
-            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{ $options{identity} }, $self->{internal_crypt}->{iv});
+            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{$identity}, $self->{internal_crypt}->{iv});
         };
         if ($@) {
             $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);

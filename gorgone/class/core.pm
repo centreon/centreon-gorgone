@@ -171,9 +171,11 @@ sub init {
     $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} = '/tmp/gorgone/routing-' . $time_hi . '.ipc'
         if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} eq '');
 
-    $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 0;
-    $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 1   
-        if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_type} =~ /^(?true|1)$/i);
+    if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt}) && $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} =~ /^(?:true|1)$/i) {
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 1;
+    } else {
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 0;
+    }
 
     $self->{internal_crypt} = { enabled => 0 };
     if ($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} == 1) {
@@ -196,11 +198,11 @@ sub init {
             keysize => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}
         );
         ($rv, $iv) = gorgone::standard::library::generate_symkey(
-            keysize => 10
+            keysize => 16
         );
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key} = $symkey;
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys} = {};
-        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_iv} = $vector;
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_iv} = $iv;
 
         $self->{internal_crypt} = {
             enabled => 1,
@@ -457,7 +459,7 @@ sub read_internal_message {
             $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$identity};
         }
         eval {
-            $message = $self->{cipher}->decrypt($key, $self->{internal_crypt}->{iv});
+            $message = $self->{cipher}->decrypt($message, $key, $self->{internal_crypt}->{iv});
         };
         if ($@) {
             $self->{logger}->writeLogError("[core] decrypt issue: " .  $@);
@@ -471,9 +473,9 @@ sub read_internal_message {
 sub send_internal_message {
     my ($self, %options) = @_;
 
-    my $message = gorgone::standard::library::$options{message};
+    my $message = $options{message};
     if (!defined($message)) {
-        $message = build_protocol(%options);
+        $message = gorgone::standard::library::build_protocol(%options);
     }
     zmq_sendmsg($self->{internal_socket}, $options{identity}, ZMQ_DONTWAIT | ZMQ_SNDMORE);
 

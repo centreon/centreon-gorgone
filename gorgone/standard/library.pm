@@ -29,6 +29,7 @@ use JSON::XS;
 use File::Basename;
 use Crypt::PK::RSA;
 use Crypt::PRNG;
+use Crypt::Mode::CBC;
 use Crypt::CBC;
 use Data::Dumper;
 use File::Path;
@@ -214,6 +215,12 @@ sub zmq_core_response {
     zmq_sendmsg($options{socket}, $msg, ZMQ_DONTWAIT);
 }
 
+sub zmq_get_routing_id {
+    my (%options) = @_;
+
+    return zmq_getsockopt($options{socket}, ZMQ_IDENTITY);
+}
+
 sub zmq_getfd {
     my (%options) = @_;
 
@@ -224,6 +231,23 @@ sub zmq_events {
     my (%options) = @_;
 
     return zmq_getsockopt($options{socket}, ZMQ_EVENTS);
+}
+
+sub cipher_encrypt {
+    my (%options) = @_;
+
+    my $m = Crypt::Mode::CBC->new($options{cipher}, $options{padding});
+    my $ciphertext;
+    eval {
+        $ciphertext = $m->encrypt($options{message}, $options{key}, $options{iv});
+    };
+    if ($@) {
+        if (defined($options{logger})) {
+            $options{logger}->writeLogError("[$options{module}] Sym encrypt issue: " .  $@);
+        }
+        return (-1, $@);
+    }
+    return (0, $ciphertext);
 }
 
 sub uncrypt_message {
@@ -507,6 +531,27 @@ sub constatus {
     }
     
     return (GORGONE_ACTION_FINISH_KO, { action => 'constatus', message => 'cannot get value' }, 'CONSTATUS');
+}
+
+sub setmodulekey {
+    my (%options) = @_;
+
+    my $data;
+    eval {
+        $data = JSON::XS->new->utf8->decode($options{data});
+    };
+    if ($@) {
+        return (GORGONE_ACTION_FINISH_KO, { message => 'request not well formatted' });
+    }
+
+    if (!defined($data->{key})) {
+        return (GORGONE_ACTION_FINISH_KO, { action => 'setmodulekey', message => 'please set key' });
+    }
+
+    $options{gorgone}->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{ $options{identity} } = $data->{key};
+
+    $options{logger}->writeLogInfo('[core] module key $options{identity} changed');
+    return (GORGONE_ACTION_FINISH_OK, { action => 'setmodulekey', message => 'setmodulekey changed' });
 }
 
 sub setcoreid {
@@ -819,6 +864,38 @@ sub build_protocol {
     }
 
     return '[' . $action . '] [' . $token . '] [' . $target . '] ' . $data;
+}
+
+sub zmq_send_internal_message {
+    my (%options) = @_;
+    my ($message, $rv) = ($options{message});
+
+    if (!defined($message)) {
+        $message = build_protocol(%options);
+    }
+    if (defined($options{identity})) {
+        zmq_sendmsg($options{socket}, $options{identity}, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+    }
+
+    if (defined($options{internal_crypt}) && $options{internal_crypt}->{enable} == 1) {
+        my $key = $options{internal_crypt}->{symkeys}->{ $options{internal_crypt}->{current} };
+        if (defined($options{identity})) {
+            if (defined($options{internal_crypt}->{identity}->{ $options{identity} })) {
+                $key = $options{internal_crypt}->{symkeys}->{ $options{internal_crypt}->{identity}->{ $options{identity} } };
+            }
+        }
+        ($rv, $message) = cipher_encrypt(
+            logger => $options{logger},
+            module => $options{module_id},
+            key => $key,
+            cipher => $options{internal_crypt}->{cipher},
+            padding => $options{internal_crypt}->{padding},
+            iv => $options{internal_crypt}->{iv}
+        );
+        return if ($rv == -1);
+    }
+
+    zmq_sendmsg($options{socket}, $message, ZMQ_DONTWAIT);
 }
 
 sub zmq_send_message {

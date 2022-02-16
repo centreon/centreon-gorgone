@@ -468,7 +468,7 @@ sub event_internal {
 
     my $socket = $options{channel} eq 'control' ? $connector->{internal_socket} : $connector->{internal_channels}->{ $options{channel} };
     while (1) {
-        my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $socket);
+        my $message = $connector->read_message(socket => $socket);
         last if (!defined($message));
 
         proxy(message => $message, channel => $options{channel});

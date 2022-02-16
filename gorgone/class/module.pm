@@ -28,6 +28,7 @@ use gorgone::standard::library;
 use gorgone::standard::misc;
 use gorgone::class::tpapi;
 use JSON::XS;
+use Crypt::Mode::CBC;
 
 my %handlers = (DIE => {});
 
@@ -46,6 +47,21 @@ sub new {
     $self->{config_db_centreon} = $options{config_db_centreon};
     $self->{config_db_centstorage} = $options{config_db_centstorage};
     $self->{stop} = 0;
+
+    $self->{internal_crypt} = { enabled => 0 };
+    if ($self->{config_core}->{internal_com_crypt} == 1) {
+        $self->{cipher} = Crypt::Mode::CBC->new($self->{config_core}->{internal_com_cipher}, $self->{config_core}->{internal_com_padding});
+
+        $self->{internal_crypt} = {
+            enabled = 1,
+            rotation => $self->{config_core}->{internal_com_rotation}
+            cipher => $self->{config_core}->{internal_com_cipher},
+            padding => $self->{config_core}->{internal_com_padding},
+            iv => $self->{config_core}->{internal_com_iv},
+            core_key => $self->{config_core}->{internal_com_core_key},
+            identity_keys => $self->{config_core}->{internal_com_identity_keys}
+        };
+    }
 
     $self->{tpapi} = gorgone::class::tpapi->new();
     $self->{tpapi}->load_configuration(configuration => $options{config_core}->{tpapi});
@@ -76,17 +92,78 @@ sub generate_token {
    return gorgone::standard::library::generate_token(length => $options{length});
 }
 
+sub read_message {
+    my ($self, %options) = @_;
+
+    my $message = gorgone::standard::library::zmq_dealer_read_message(socket => defined($options{socket}) ? $options{socket} : $self->{internal_socket});
+    return undef if (!defined($message));
+    return $options{message} if ($self->{internal_crypt}->{enabled} == 0);
+
+    my $plaintext;
+    eval {
+        $plaintext = $self->{cipher}->decrypt($message, $self->{internal_crypt}->{core_key}, $self->{internal_crypt}->{iv});
+    };
+    if ($@) {
+        $self->{logger}->writeLogError("[$self->{module_id}] decrypt issue: " .  $@);
+        return undef;
+    }
+
+    return $plaintext;
+}
+
+sub send_internal_key {
+    my ($self, %options) = @_;
+
+    my $message = gorgone::standard::library::build_protocol(
+        action => 'SETMODULEKEY',
+        data => { key => $key }
+    );
+    eval {
+        $message = $self->{cipher}->encrypt($message, $options{encrypt_key}, $self->{internal_crypt}->{iv});
+    };
+    if ($@) {
+        $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);
+        return -1;
+    }
+
+    return 0;
+}
+
 sub send_internal_action {
     my ($self, %options) = @_;
 
-    gorgone::standard::library::zmq_send_message(
-        socket => $self->{internal_socket},
-        token => $options{token},
-        action => $options{action},
-        target => $options{target},
-        data => $options{data},
-        json_encode => defined($options{data_noencode}) ? undef : 1
-    );
+    my $message = $options{message};
+    if (!defined($message)) {
+        $message = gorgone::standard::library::build_protocol(
+            token => $options{token},
+            action => $options{action},
+            target => $options{target},
+            data => $options{data},
+            json_encode => defined($options{data_noencode}) ? undef : 1
+        );
+    }
+
+    my $socket = defined($options{socket}) ? $options{socket} : $self->{internal_socket};
+    if (defined($options{internal_crypt}) && $options{internal_crypt}->{enabled} == 1) {
+        my $identity = gorgone::standard::library::zmq_get_routing_id(socket => $socket);
+
+        if (!defined($self->{internal_crypt}->{identity_keys}->{ $options{identity} })) {
+            my ($rv, $key) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
+            ($rv) = $self->send_internal_key(socket => $socket, key => $keys, encrypt_key => $self->{internal_crypt}->{core_key});
+            return undef if ($rv == -1);
+            $self->{internal_crypt}->{identity_keys}->{ $options{identity} } = $key;
+        }
+
+        eval {
+            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{ $options{identity} }, $self->{internal_crypt}->{iv});
+        };
+        if ($@) {
+            $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);
+            return undef;
+        }
+    }
+
+    zmq_sendmsg($socket, $message, ZMQ_DONTWAIT);
 }
 
 sub send_log_msg_error {
@@ -95,7 +172,7 @@ sub send_log_msg_error {
     return if (!defined($options{token}));
 
     $self->{logger}->writeLogError("[$self->{module_id}] -$options{subname}- $options{number} $options{message}");
-    gorgone::standard::library::zmq_send_message(
+    $self->send_internal_action(
         socket => (defined($options{socket})) ? $options{socket} : $self->{internal_socket},
         action => 'PUTLOG',
         token => $options{token},
@@ -111,7 +188,7 @@ sub send_log {
 
     return if (defined($options{logging}) && $options{logging} =~ /^(?:false|0)$/);
 
-    gorgone::standard::library::zmq_send_message(
+    $self->send_internal_action(
         socket => (defined($options{socket})) ? $options{socket} : $self->{internal_socket},
         action => 'PUTLOG',
         token => $options{token},

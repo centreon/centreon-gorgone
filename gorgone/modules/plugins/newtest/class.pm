@@ -589,7 +589,7 @@ sub action_newtestresync {
 
 sub event {
     while (1) {
-        my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+        my $message = $connector->read_message();
         last if (!defined($message));
 
         $connector->{logger}->writeLogDebug("gorgone-newtest: class: $message");

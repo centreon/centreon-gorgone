@@ -106,7 +106,7 @@ sub class_handle_HUP {
 
 sub event {
     while (1) {
-        my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+        my $message = $connector->read_message();
         last if (!defined($message));
 
         $connector->{logger}->writeLogDebug("[httpserver] Event: $message");
@@ -340,7 +340,8 @@ sub api_call {
         content => $content,
         socket => $connector->{internal_socket},
         logger => $self->{logger},
-        api_endpoints => $self->{api_endpoints}
+        api_endpoints => $self->{api_endpoints},
+        module => $self
     );
 
     return $response;

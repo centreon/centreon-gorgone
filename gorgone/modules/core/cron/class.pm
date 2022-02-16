@@ -372,7 +372,7 @@ sub action_deletecron {
 
 sub event {
     while (1) {
-        my $message = gorgone::standard::library::zmq_dealer_read_message(socket => $connector->{internal_socket});
+        my $message = $connector->read_message(); 
         last if (!defined($message));
 
         $connector->{logger}->writeLogDebug("[cron] Event: $message");
@@ -416,7 +416,7 @@ sub dispatcher {
     my $token = (defined($options->{definition}->{keep_token})) && $options->{definition}->{keep_token} =~ /true|1/i
         ? $options->{definition}->{id} : undef;
 
-    gorgone::standard::library::zmq_send_message(
+    $options->{connector}->send_internal_action(
         socket => $options->{socket},
         token => $token,
         action => $options->{definition}->{action},
@@ -476,6 +476,7 @@ sub run {
             $definition->{timespec},
             $definition->{id},
             {
+                connector => $connector,
                 socket => $connector->{internal_socket},
                 logger => $self->{logger},
                 definition => $definition

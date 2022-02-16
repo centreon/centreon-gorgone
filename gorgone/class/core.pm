@@ -24,6 +24,7 @@ use strict;
 use warnings;
 use POSIX ":sys_wait_h";
 use Sys::Hostname;
+use Crypt::Mode::CBC;
 use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use gorgone::standard::library;
@@ -169,6 +170,46 @@ sub init {
         if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_type}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_type} eq '');
     $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} = '/tmp/gorgone/routing-' . $time_hi . '.ipc'
         if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} eq '');
+
+    $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 0;
+    $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 1   
+        if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_type} =~ /^(?true|1)$/i);
+
+    $self->{internal_crypt} = { enabled => 0 };
+    if ($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} == 1) {
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher} = 'AES'
+            if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher} eq '');
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding} = 1 # PKCS5 padding
+            if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding} eq '');
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} = 32
+            if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} eq '');
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} = 5
+            if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} eq '');
+
+        $self->{cipher} = Crypt::Mode::CBC->new(
+            $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher},
+            $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding}
+        );
+
+        my ($rv, $symkey, $iv);
+        ($rv, $symkey) = gorgone::standard::library::generate_symkey(
+            keysize => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}
+        );
+        ($rv, $iv) = gorgone::standard::library::generate_symkey(
+            keysize => 10
+        );
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key} = $symkey;
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys} = {};
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_iv} = $vector;
+
+        $self->{internal_crypt} = {
+            enabled => 1,
+            cipher => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher},
+            padding => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding},
+            iv => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_iv}
+        };
+    }
+
     $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{timeout} = 
         defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{timeout}) && $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{timeout} =~ /(\d+)/ ? $1 : 50;
 
@@ -393,13 +434,62 @@ sub load_modules {
 
     # Load internal functions
     foreach my $method_name (('addlistener', 'putlog', 'getlog', 'kill', 'ping', 
-        'getthumbprint', 'constatus', 'setcoreid', 'synclogs', 'loadmodule', 'unloadmodule', 'information')) {
+        'getthumbprint', 'constatus', 'setcoreid', 'synclogs', 'loadmodule', 'unloadmodule', 'information', 'setmodulekey')) {
         unless ($self->{internal_register}->{$method_name} = gorgone::standard::library->can($method_name)) {
             $self->{logger}->writeLogError("[core] No function '$method_name'");
             exit(1);
         }
     }
 }
+
+sub read_internal_message {
+    my ($self, %options) = @_;
+
+    my ($identity, $message) = gorgone::standard::library::zmq_read_message(
+        socket => $self->{internal_socket},
+        logger => $self->{logger}
+    );
+    return undef if (!defined($identity));
+
+    if ($self->{internal_crypt}->{enabled} == 1) {
+        my $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key};
+        if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$identity})) {
+            $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$identity};
+        }
+        eval {
+            $message = $self->{cipher}->decrypt($key, $self->{internal_crypt}->{iv});
+        };
+        if ($@) {
+            $self->{logger}->writeLogError("[core] decrypt issue: " .  $@);
+            return undef;
+        }
+    }
+
+    return ($identity, $message);
+}
+
+sub send_internal_message {
+    my ($self, %options) = @_;
+
+    my $message = gorgone::standard::library::$options{message};
+    if (!defined($message)) {
+        $message = build_protocol(%options);
+    }
+    zmq_sendmsg($self->{internal_socket}, $options{identity}, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+
+    if ($self->{internal_crypt}->{enabled} == 1) {
+        eval {
+            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{keys}->{current}, $self->{internal_crypt}->{iv});
+        };
+        if ($@) {
+            $self->{logger}->writeLogError("[core] encrypt issue: " .  $@);
+            return undef;
+        }
+    }
+
+    zmq_sendmsg($self->{internal_socket}, $message, ZMQ_DONTWAIT);
+}
+
 
 sub broadcast_run {
     my ($self, %options) = @_;
@@ -419,7 +509,7 @@ sub broadcast_run {
 
     foreach (keys %{$self->{modules_register}}) {
         $self->{modules_register}->{$_}->{broadcast}->(
-            socket => $self->{internal_socket},
+            gorgone => $self,
             dbh => $self->{db_gorgone},
             action => $options{action},
             logger => $self->{logger},
@@ -494,7 +584,7 @@ sub message_run {
         $self->{counters}->{proxy}->{total}++;
 
         $self->{modules_register}->{ $self->{modules_id}->{ $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{proxy_name} } }->{routing}->(
-            socket => $self->{internal_socket},
+            gorgone => $self,
             dbh => $self->{db_gorgone},
             logger => $self->{logger}, 
             action => $action,
@@ -506,7 +596,7 @@ sub message_run {
         return ($token, 0);
     }
     
-    if ($action =~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT)$/) {
+    if ($action =~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT|SETMODULEKEY)$/) {
         my ($code, $response, $response_type) = $self->{internal_register}->{lc($action)}->(
             gorgone => $self,
             gorgone_config => $self->{config}->{configuration}->{gorgone},
@@ -538,14 +628,14 @@ sub message_run {
         );
     } else {
         $self->{modules_register}->{$self->{modules_events}->{$action}->{module}->{package}}->{routing}->(
-            socket => $self->{internal_socket}, 
+            gorgone => $self,
             dbh => $self->{db_gorgone},
             logger => $self->{logger},
             action => $action,
             token => $token,
             target => $target,
             data => $data,
-            hostname => $self->{hostname}
+            hostname => $self->{hostname},
         );
     }
     return ($token, 0);
@@ -553,10 +643,7 @@ sub message_run {
 
 sub router_internal_event {
     while (1) {
-        my ($identity, $message) = gorgone::standard::library::zmq_read_message(
-            socket => $gorgone->{internal_socket},
-            logger => $gorgone->{logger}
-        );
+        my ($identity, $message) = $gorgone->read_internal_message();
         last if (!defined($identity));
 
         my ($token, $code, $response, $response_type) = $gorgone->message_run(
@@ -799,7 +886,6 @@ sub check_exit_modules {
                 gorgone => $self,
                 logger => $self->{logger},
                 dead_childs => $self->{return_child},
-                internal_socket => $self->{internal_socket},
                 dbh => $self->{db_gorgone},
                 api_endpoints => $self->{api_endpoints}
             );
@@ -900,6 +986,7 @@ sub run {
     foreach my $name (keys %{$gorgone->{modules_register}}) {
         $gorgone->{logger}->writeLogDebug("[core] Call init function from module '$name'");
         $gorgone->{modules_register}->{$name}->{init}->(
+            gorgone => $gorgone,
             id => $gorgone->{id},
             logger => $gorgone->{logger},
             poll => $gorgone->{poll},

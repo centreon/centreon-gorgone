@@ -185,7 +185,7 @@ sub init {
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding} eq '');
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} = 32
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} eq '');
-        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} = 1 # minutes
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} = 1440 # minutes
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} eq '');
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} *= 60;
 
@@ -201,7 +201,9 @@ sub init {
         ($rv, $iv) = gorgone::standard::library::generate_symkey(
             keysize => 16
         );
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key_ctime} = time();
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key} = $symkey;
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_oldkey} = undef;
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys} = {};
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_iv} = $iv;
 
@@ -445,6 +447,18 @@ sub load_modules {
     }
 }
 
+sub broadcast_core_key {
+    my ($self, %options) = @_;
+
+    my ($rv, $key) = gorgone::standard::library::generate_symkey(
+        keysize => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}
+    );
+    $self->message_run(
+        message => '[BCASTCOREKEY] [] [] { "key": "' . unpack('H*', $key). '"}',
+        router_type => 'internal'
+    );
+}
+
 sub read_internal_message {
     my ($self, %options) = @_;
 
@@ -456,17 +470,26 @@ sub read_internal_message {
 
     if ($self->{internal_crypt}->{enabled} == 1) {
         my $id = pack('H*', $identity);
-        my $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key};
+        my $keys;
         if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id})) {
-            $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id}->{key};
+            $keys = [ $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id}->{key} ];
+        } else {
+            $keys = [ $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key} ];
+            push @$keys, $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_oldkey}
+                if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_oldkey}));
         }
-        eval {
-            $message = $self->{cipher}->decrypt($message, $key, $self->{internal_crypt}->{iv});
-        };
-        if ($@) {
-            $self->{logger}->writeLogError("[core] decrypt issue: " .  $@);
-            return undef;
+        foreach my $key (@$keys) {
+            my $plaintext;
+            eval {
+                $plaintext = $self->{cipher}->decrypt($message, $key, $self->{internal_crypt}->{iv});
+            };
+            if (defined($plaintext) && $plaintext =~ /^\[[A-Za-z_\-]+?\]/) {
+                return ($identity, $plaintext);
+            }
         }
+
+        $self->{logger}->writeLogError("[core] decrypt issue ($id): " .  ($@ ? $@ : 'no message'));
+        return undef;
     }
 
     return ($identity, $message);
@@ -528,10 +551,10 @@ sub send_internal_message {
 sub broadcast_run {
     my ($self, %options) = @_;
 
-    if ($options{action} eq 'BCASTLOGGER') {
-        my $data = gorgone::standard::library::json_decode(data => $options{data}, logger => $self->{logger});
-        return if (!defined($data));
+    my $data = gorgone::standard::library::json_decode(data => $options{data}, logger => $self->{logger});
+    return if (!defined($data));
 
+    if ($options{action} eq 'BCASTLOGGER') {
         if (defined($data->{content}->{severity}) && $data->{content}->{severity} ne '') {
             if ($data->{content}->{severity} eq 'default') {
                 $self->{logger}->set_default_severity();
@@ -550,6 +573,12 @@ sub broadcast_run {
             data => $options{data},
             token => $options{token}
         );
+    }
+
+    if ($options{action} eq 'BCASTCOREKEY') {
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key_ctime} = time();
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_oldkey} = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key};
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key} = pack('H*', $data->{key});
     }
 }
 
@@ -654,7 +683,7 @@ sub message_run {
         
         return ($token, $code, $response, $response_type);
     } elsif ($action =~ /^BCAST(.*)$/) {
-        return (undef, 1, { message => "action '$action' is not known" }) if ($1 !~ /^LOGGER$/);
+        return (undef, 1, { message => "action '$action' is not known" }) if ($1 !~ /^(?:LOGGER|COREKEY)$/);
         $self->broadcast_run(
             action => $action,
             data => $data,
@@ -902,8 +931,15 @@ sub quit {
 sub check_exit_modules {
     my ($self, %options) = @_;
 
-    my $count = 0;
     my $current_time = time();
+
+    # check key rotate
+    if ($self->{internal_crypt}->{enabled} == 1 &&
+        ($current_time - $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key_ctime}) > $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation}) {
+        $self->broadcast_core_key();
+    }
+    
+    my $count = 0;
     if (time() - $self->{cb_timer_check} > 15 || $self->{stop} == 1) {
         if ($self->{stop} == 1 && (!defined($self->{sigterm_last_time}) || ($current_time - $self->{sigterm_last_time}) >= 10)) {
             $self->{sigterm_start_time} = time() if (!defined($self->{sigterm_start_time}));

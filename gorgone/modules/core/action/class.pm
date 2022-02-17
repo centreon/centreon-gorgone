@@ -721,6 +721,7 @@ sub create_child {
     }
     
     if ($child_pid == 0) {
+        $self->set_fork();
         $self->action_run(action => $options{action}, token => $options{token}, data => $options{data});
         exit(0);
     } else {

@@ -256,19 +256,19 @@ sub get_log {
 
 sub event {
     while (1) {
-        my $message = $connector->read_message();
+        my $message = $module->read_message();
         last if (!defined($message));
 
         if ($message =~ /^\[(.*?)\]\s+\[([a-zA-Z0-9:\-_]*?)\]\s+\[.*?\]\s+(.*)$/m || 
             $message =~ /^\[(.*?)\]\s+\[([a-zA-Z0-9:\-_]*?)\]\s+(.*)$/m) {
-            my $action = $1;
-            $results->{$2} = {
-                action => $1,
-                token => $2,
-                data => $3
+            my ($action, $token, $data) = ($1, $2, $3);
+            $results->{$token} = {
+                action => $action,
+                token => $token,
+                data => $data
             };
-            if ((my $method = $connector->can('action_' . lc($action)))) {
-                $method->($connector, token => $token, data => $data);
+            if ((my $method = $module->can('action_' . lc($action)))) {
+                $method->($module, token => $token, data => $data);
             }
         }
     }

@@ -200,6 +200,7 @@ sub action_addcron {
                 $definition->{timespec},
                 $definition->{id},
                 {
+                    connector => $connector,
                     socket => $connector->{internal_socket},
                     logger => $self->{logger},
                     definition => $definition

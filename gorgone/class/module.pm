@@ -49,6 +49,7 @@ sub new {
     $self->{config_db_centreon} = $options{config_db_centreon};
     $self->{config_db_centstorage} = $options{config_db_centstorage};
     $self->{stop} = 0;
+    $self->{fork} = 0;
 
     $self->{internal_crypt} = { enabled => 0 };
     if ($self->{config_core}->{internal_com_crypt} == 1) {
@@ -94,12 +95,18 @@ sub generate_token {
    return gorgone::standard::library::generate_token(length => $options{length});
 }
 
+sub set_fork {
+    my ($self, %options) = @_;
+
+    $self->{fork} = 1;
+}
+
 sub read_message {
     my ($self, %options) = @_;
 
     my $message = gorgone::standard::library::zmq_dealer_read_message(socket => defined($options{socket}) ? $options{socket} : $self->{internal_socket});
     return undef if (!defined($message));
-    return $options{message} if ($self->{internal_crypt}->{enabled} == 0);
+    return $message if ($self->{internal_crypt}->{enabled} == 0);
 
     my $plaintext;
     eval {
@@ -151,20 +158,23 @@ sub send_internal_action {
     if ($self->{internal_crypt}->{enabled} == 1) {
         my $identity = gorgone::standard::library::zmq_get_routing_id(socket => $socket);
 
-        if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
-            (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})
-            ) {
-            my ($rv, $key) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
-            ($rv) = $self->send_internal_key(socket => $socket, key => $key, encrypt_key => $self->{internal_crypt}->{core_key});
-            return undef if ($rv == -1);
-            $self->{internal_crypt}->{identity_keys}->{$identity} = {
-                key => $key,
-                ctime => time()
-            };
+        my $key = $self->{internal_crypt}->{core_key};
+        if ($self->{fork} == 0) {
+            if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
+                (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})) {
+                my ($rv, $genkey) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
+                ($rv) = $self->send_internal_key(socket => $socket, key => $genkey, encrypt_key => $self->{internal_crypt}->{core_key});
+                return undef if ($rv == -1);
+                $self->{internal_crypt}->{identity_keys}->{$identity} = {
+                    key => $genkey,
+                    ctime => time()
+                };
+            }
+            $key = $self->{internal_crypt}->{identity_keys}->{$identity}->{key};
         }
 
         eval {
-            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{$identity}->{key}, $self->{internal_crypt}->{iv});
+            $message = $self->{cipher}->encrypt($message, $key, $self->{internal_crypt}->{iv});
         };
         if ($@) {
             $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);
@@ -286,6 +296,19 @@ sub action_bcastlogger {
         } else {
             $self->{logger}->severity($options{data}->{content}->{severity});
         }
+    }
+}
+
+sub action_bcastcorekey {
+    my ($self, %options) = @_;
+
+    return if ($self->{internal_crypt}->{enabled} == 0);
+
+    if (defined($options{data}->{key})) {
+        my $container = '';
+        $container = 'container ' . $self->{container_id} . ': ' if (defined($self->{container_id}));
+        $self->{logger}->writeLogDebug("[$self->{module_id}] ${container}core key changed");
+        $self->{internal_crypt}->{core_key} = pack('H*', $options{data}->{key});
     }
 }
 

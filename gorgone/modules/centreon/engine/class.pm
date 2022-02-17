@@ -259,6 +259,7 @@ sub create_child {
     }
     
     if ($child_pid == 0) {
+        $self->set_fork();
         $self->action_run(action => $action, token => $token, data => $data);
         exit(0);
     }

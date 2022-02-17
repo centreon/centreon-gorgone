@@ -95,7 +95,7 @@ sub exit_process {
     exit(0);
 }
 
-sub read_message {
+sub read_message_client {
     my (%options) = @_;
 
     return undef if (!defined($options{identity}) || $options{identity} !~ /^gorgone-proxy-(.*?)-(.*?)$/);
@@ -172,7 +172,7 @@ sub connect {
             config_core => $self->{config_core},
             logger => $self->{logger}
         );
-        $self->{clients}->{ $options{id} }->{class}->init(callback => \&read_message);
+        $self->{clients}->{ $options{id} }->{class}->init(callback => \&read_message_client);
     } elsif ($self->{clients}->{ $options{id} }->{type} eq 'push_ssh') {
         $self->{clients}->{$options{id}}->{class} = gorgone::modules::core::proxy::sshclient->new(logger => $self->{logger});
         my $code = $self->{clients}->{$options{id}}->{class}->open_session(

@@ -40,7 +40,6 @@ sub new {
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
-    $connector->{container_id} = $options{pool_id};
     $connector->{pool_id} = $options{pool_id};
     $connector->{clients} = {};
     $connector->{internal_channels} = {};

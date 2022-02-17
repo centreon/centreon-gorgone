@@ -35,6 +35,7 @@ use Data::Dumper;
 use File::Path;
 use File::Basename;
 use MIME::Base64;
+use Errno;
 use Time::HiRes;
 use YAML::XS;
 $YAML::XS::Boolean = 'JSON::PP';
@@ -943,7 +944,9 @@ sub zmq_read_message {
     # Process all parts of the message
     my $message = zmq_recvmsg($options{socket}, ZMQ_DONTWAIT);
     if (!defined($message)) {
-        $options{logger}->writeLogDebug("[core] zmq_recvmsg error: $!");
+        return undef if ($! == Errno::EAGAIN);
+
+        $options{logger}->writeLogError("[core] zmq_recvmsg error: $!");
         return undef;
     }
     my $identity = zmq_msg_data($message);
@@ -954,7 +957,9 @@ sub zmq_read_message {
     }
     $message = zmq_recvmsg($options{socket}, ZMQ_DONTWAIT);
     if (!defined($message)) {
-        $options{logger}->writeLogDebug("[core] zmq_recvmsg error: $!");
+        return undef if ($! == Errno::EAGAIN);
+
+        $options{logger}->writeLogError("[core] zmq_recvmsg error: $!");
         return undef;
     }
     my $data = zmq_msg_data($message);

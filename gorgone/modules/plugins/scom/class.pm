@@ -42,7 +42,6 @@ sub new {
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
-    $connector->{container_id} = $options{container_id};
     $connector->{config_scom} = $options{config_scom};
 
     $connector->{api_version} = $options{config_scom}->{api_version};

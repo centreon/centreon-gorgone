@@ -281,7 +281,7 @@ sub create_child {
             config_db_centreon => $config_db_centreon,
             config_db_centstorage => $config_db_centstorage,
             config_newtest => $last_containers->{$options{container_id}},
-            container_id => $options{container_id},
+            container_id => $options{container_id}
         );
         $module->run();
         exit(0);

@@ -41,6 +41,10 @@ sub new {
 
     $self->{internal_socket} = undef;
     $self->{module_id} = $options{module_id};
+    $self->{container_id} = $options{container_id};
+    $self->{container} = '';
+    $self->{container} = ' container ' . $self->{container_id} . ':' if (defined($self->{container_id}));
+
     $self->{core_id} = $options{core_id};
     $self->{logger} = $options{logger};
     $self->{config} = $options{config};
@@ -61,8 +65,7 @@ sub new {
             cipher => $self->{config_core}->{internal_com_cipher},
             padding => $self->{config_core}->{internal_com_padding},
             iv => $self->{config_core}->{internal_com_iv},
-            core_key => $self->{config_core}->{internal_com_core_key},
-            core_oldkey => $self->{config_core}->{internal_com_core_oldkey},
+            core_keys => [$self->{config_core}->{internal_com_core_key}, $self->{config_core}->{internal_com_core_oldkey}],
             identity_keys => $self->{config_core}->{internal_com_identity_keys}
         };
     }
@@ -87,12 +90,12 @@ sub class_handle_DIE {
 sub handle_DIE {
     my ($self, $msg) = @_;
 
-    $self->{logger}->writeLogError("[$self->{module_id}] Receiving DIE: $msg");
+    $self->{logger}->writeLogError("[$self->{module_id}] $self->{container}Receiving DIE: $msg");
 }
 
 sub generate_token {
    my ($self, %options) = @_;
-   
+
    return gorgone::standard::library::generate_token(length => $options{length});
 }
 
@@ -109,16 +112,20 @@ sub read_message {
     return undef if (!defined($message));
     return $message if ($self->{internal_crypt}->{enabled} == 0);
 
-    my $plaintext;
-    eval {
-        $plaintext = $self->{cipher}->decrypt($message, $self->{internal_crypt}->{core_key}, $self->{internal_crypt}->{iv});
-    };
-    if ($@) {
-        $self->{logger}->writeLogError("[$self->{module_id}] decrypt issue: " .  $@);
-        return undef;
+    foreach my $key (@{$self->{internal_crypt}->{core_keys}}) {
+        next if (!defined($key));
+
+        my $plaintext;
+        eval {
+            $plaintext = $self->{cipher}->decrypt($message, $key, $self->{internal_crypt}->{iv});
+        };
+        if (defined($plaintext) && $plaintext =~ /^\[[A-Za-z_\-]+?\]/) {
+            return $plaintext;
+        }
     }
 
-    return $plaintext;
+    $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} decrypt issue: " . ($@ ? $@ : 'no message'));
+    return undef;
 }
 
 sub send_internal_key {
@@ -133,7 +140,7 @@ sub send_internal_key {
         $message = $self->{cipher}->encrypt($message, $options{encrypt_key}, $self->{internal_crypt}->{iv});
     };
     if ($@) {
-        $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);
+        $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} encrypt issue: " .  $@);
         return -1;
     }
 
@@ -159,7 +166,7 @@ sub send_internal_action {
     if ($self->{internal_crypt}->{enabled} == 1) {
         my $identity = gorgone::standard::library::zmq_get_routing_id(socket => $socket);
 
-        my $key = $self->{internal_crypt}->{core_key};
+        my $key = $self->{internal_crypt}->{core_keys}->[0];
         if ($self->{fork} == 0) {
             if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
                 (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})) {
@@ -168,7 +175,7 @@ sub send_internal_action {
                     socket => $socket,
                     key => $genkey,
                     encrypt_key => defined($self->{internal_crypt}->{identity_keys}->{$identity}) ?
-                        $self->{internal_crypt}->{identity_keys}->{$identity}->{key} : $self->{internal_crypt}->{core_key}
+                        $self->{internal_crypt}->{identity_keys}->{$identity}->{key} : $self->{internal_crypt}->{core_keys}->[0]
                 );
                 return undef if ($rv == -1);
                 $self->{internal_crypt}->{identity_keys}->{$identity} = {
@@ -183,7 +190,7 @@ sub send_internal_action {
             $message = $self->{cipher}->encrypt($message, $key, $self->{internal_crypt}->{iv});
         };
         if ($@) {
-            $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);
+            $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} encrypt issue: " .  $@);
             return undef;
         }
     }
@@ -196,7 +203,7 @@ sub send_log_msg_error {
 
     return if (!defined($options{token}));
 
-    $self->{logger}->writeLogError("[$self->{module_id}] -$options{subname}- $options{number} $options{message}");
+    $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} -$options{subname}- $options{number} $options{message}");
     $self->send_internal_action(
         socket => (defined($options{socket})) ? $options{socket} : $self->{internal_socket},
         action => 'PUTLOG',
@@ -230,9 +237,7 @@ sub json_encode {
         $encoded_arguments = JSON::XS->new->utf8->encode($options{argument});
     };
     if ($@) {
-        my $container = '';
-        $container = 'container ' . $self->{container_id} . ': ' if (defined($self->{container_id}));
-        $self->{logger}->writeLogError("[$self->{module_id}] ${container}$options{method} - cannot encode json: $@");
+        $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} $options{method} - cannot encode json: $@");
         return 1;
     }
 
@@ -247,9 +252,7 @@ sub json_decode {
         $decoded_arguments = JSON::XS->new->utf8->decode($options{argument});
     };
     if ($@) {
-        my $container = '';
-        $container = 'container ' . $self->{container_id} . ': ' if (defined($self->{container_id}));
-        $self->{logger}->writeLogError("[$self->{module_id}] ${container}$options{method} - cannot decode json: $@");
+        $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} $options{method} - cannot decode json: $@");
         if (defined($options{token})) {
             $self->send_log(
                 code => GORGONE_ACTION_FINISH_KO,
@@ -274,9 +277,7 @@ sub execute_shell_cmd {
         wait_exit => 1,
     );
     if ($lerror == -1 || ($exit_code >> 8) != 0) {
-        my $container = '';
-        $container = 'container ' . $self->{container_id} . ': ' if (defined($self->{container_id}));
-        $self->{logger}->writeLogError("[$self->{module_id}] ${container}command execution issue $options{cmd} : " . $stdout);
+        $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} command execution issue $options{cmd} : " . $stdout);
         return -1;
     }
 
@@ -311,10 +312,9 @@ sub action_bcastcorekey {
     return if ($self->{internal_crypt}->{enabled} == 0);
 
     if (defined($options{data}->{key})) {
-        my $container = '';
-        $container = 'container ' . $self->{container_id} . ': ' if (defined($self->{container_id}));
-        $self->{logger}->writeLogDebug("[$self->{module_id}] ${container}core key changed");
-        $self->{internal_crypt}->{core_key} = pack('H*', $options{data}->{key});
+        $self->{logger}->writeLogDebug("[$self->{module_id}]$self->{container} core key changed");
+        $self->{internal_crypt}->{core_keys}->[1] = $self->{internal_crypt}->{core_keys}->[0];
+        $self->{internal_crypt}->{core_keys}->[0] = pack('H*', $options{data}->{key});
     }
 }
 

@@ -45,7 +45,6 @@ sub new {
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
-    $connector->{container_id} = $options{container_id};
     $connector->{config_newtest} = $options{config_newtest};
 
     $connector->{resync_time} = $options{config_newtest}->{resync_time};

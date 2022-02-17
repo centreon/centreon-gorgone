@@ -207,6 +207,7 @@ sub routing {
         target => $options{target},
         dbh => $options{dbh},
         token => $options{token},
+        gorgone => $options{gorgone},
         logger => $options{logger}
     );
     return if ($code == -1);
@@ -747,7 +748,8 @@ sub create_child {
             config_core => $config_core,
             config => $config,
             pool_id => $options{pool_id},
-            core_id => $core_id
+            core_id => $core_id,
+            container_id => $options{pool_id}
         );
         $module->run();
         exit(0);

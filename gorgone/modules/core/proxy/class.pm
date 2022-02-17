@@ -40,6 +40,7 @@ sub new {
     $connector = $class->SUPER::new(%options);
     bless $connector, $class;
 
+    $connector->{container_id} = $options{pool_id};
     $connector->{pool_id} = $options{pool_id};
     $connector->{clients} = {};
     $connector->{internal_channels} = {};
@@ -387,6 +388,10 @@ sub proxy {
     } elsif ($action eq 'BCASTLOGGER' && $target_complete eq '') {
         (undef, $data) = $connector->json_decode(argument => $data);
         $connector->action_bcastlogger(data => $data);
+        return ;
+    } elsif ($action eq 'BCASTCOREKEY' && $target_complete eq '') {
+        (undef, $data) = $connector->json_decode(argument => $data);
+        $connector->action_bcastcorekey(data => $data);
         return ;
     } elsif ($action eq 'PROXYCLOSECONNECTION') {
         $connector->action_proxycloseconnection(data => $data);

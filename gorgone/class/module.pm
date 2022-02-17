@@ -62,6 +62,7 @@ sub new {
             padding => $self->{config_core}->{internal_com_padding},
             iv => $self->{config_core}->{internal_com_iv},
             core_key => $self->{config_core}->{internal_com_core_key},
+            core_oldkey => $self->{config_core}->{internal_com_core_oldkey},
             identity_keys => $self->{config_core}->{internal_com_identity_keys}
         };
     }
@@ -163,7 +164,12 @@ sub send_internal_action {
             if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
                 (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})) {
                 my ($rv, $genkey) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
-                ($rv) = $self->send_internal_key(socket => $socket, key => $genkey, encrypt_key => $self->{internal_crypt}->{core_key});
+                ($rv) = $self->send_internal_key(
+                    socket => $socket,
+                    key => $genkey,
+                    encrypt_key => defined($self->{internal_crypt}->{identity_keys}->{$identity}) ?
+                        $self->{internal_crypt}->{identity_keys}->{$identity}->{key} : $self->{internal_crypt}->{core_key}
+                );
                 return undef if ($rv == -1);
                 $self->{internal_crypt}->{identity_keys}->{$identity} = {
                     key => $genkey,

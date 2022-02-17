@@ -548,9 +548,13 @@ sub setmodulekey {
         return (GORGONE_ACTION_FINISH_KO, { action => 'setmodulekey', message => 'please set key' });
     }
 
-    $options{gorgone}->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{ $options{identity} } = pack('H*', $data->{key});
+    my $id = pack('H*', $options{identity});
+    $options{gorgone}->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id} = {
+        key => pack('H*', $data->{key}),
+        ctime => time()
+    };
 
-    $options{logger}->writeLogInfo('[core] module key $options{identity} changed');
+    $options{logger}->writeLogInfo('[core] module key ' . $id . ' changed');
     return (GORGONE_ACTION_FINISH_OK, { action => 'setmodulekey', message => 'setmodulekey changed' });
 }
 

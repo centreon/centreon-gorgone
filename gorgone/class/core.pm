@@ -185,8 +185,9 @@ sub init {
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_padding} eq '');
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} = 32
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_keysize} eq '');
-        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} = 5
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} = 1 # minutes
             if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} eq '');
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_rotation} *= 60;
 
         $self->{cipher} = Crypt::Mode::CBC->new(
             $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_cipher},
@@ -454,9 +455,10 @@ sub read_internal_message {
     return undef if (!defined($identity));
 
     if ($self->{internal_crypt}->{enabled} == 1) {
+        my $id = pack('H*', $identity);
         my $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key};
-        if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$identity})) {
-            $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$identity};
+        if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id})) {
+            $key = $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_identity_keys}->{$id}->{key};
         }
         eval {
             $message = $self->{cipher}->decrypt($message, $key, $self->{internal_crypt}->{iv});
@@ -470,6 +472,33 @@ sub read_internal_message {
     return ($identity, $message);
 }
 
+sub send_internal_response {
+    my ($self, %options) = @_;
+
+    zmq_sendmsg($self->{internal_socket}, pack('H*', $options{identity}), ZMQ_DONTWAIT | ZMQ_SNDMORE);
+
+    my $response_type = defined($options{response_type}) ? $options{response_type} : 'ACK';
+    my $data = gorgone::standard::library::json_encode(data => { code => $options{code}, data => $options{data} });
+    # We add 'target' for 'PONG', 'SYNCLOGS'. Like that 'gorgone-proxy can get it
+    my $message = '[' . $response_type . '] [' . (defined($options{token}) ? $options{token} : '') . '] ' . ($response_type =~ /^PONG|SYNCLOGS$/ ? '[] ' : '') . $data;
+
+    if ($self->{internal_crypt}->{enabled} == 1) {
+        eval {
+            $message = $self->{cipher}->encrypt(
+                $message,
+                $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key},
+                $self->{internal_crypt}->{iv}
+            );
+        };
+        if ($@) {
+            $self->{logger}->writeLogError("[core] encrypt issue: " .  $@);
+            return undef;
+        }
+    }
+
+    zmq_sendmsg($self->{internal_socket}, $message, ZMQ_DONTWAIT);
+}
+
 sub send_internal_message {
     my ($self, %options) = @_;
 
@@ -481,7 +510,11 @@ sub send_internal_message {
 
     if ($self->{internal_crypt}->{enabled} == 1) {
         eval {
-            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{keys}->{current}, $self->{internal_crypt}->{iv});
+            $message = $self->{cipher}->encrypt(
+                $message,
+                $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_core_key},
+                $self->{internal_crypt}->{iv}
+            );
         };
         if ($@) {
             $self->{logger}->writeLogError("[core] encrypt issue: " .  $@);
@@ -491,7 +524,6 @@ sub send_internal_message {
 
     zmq_sendmsg($self->{internal_socket}, $message, ZMQ_DONTWAIT);
 }
-
 
 sub broadcast_run {
     my ($self, %options) = @_;
@@ -539,7 +571,7 @@ sub message_run {
         $token = gorgone::standard::library::generate_token();
     }
 
-    if ($action !~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT|BCAST.*)$/ && 
+    if ($action !~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SETMODULEKEY|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT|BCAST.*)$/ && 
         !defined($target) && !defined($self->{modules_events}->{$action})) {
         gorgone::standard::library::add_history(
             dbh => $self->{db_gorgone},
@@ -598,7 +630,7 @@ sub message_run {
         return ($token, 0);
     }
     
-    if ($action =~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT|SETMODULEKEY)$/) {
+    if ($action =~ /^(?:ADDLISTENER|PUTLOG|GETLOG|KILL|PING|CONSTATUS|SETCOREID|SETMODULEKEY|SYNCLOGS|LOADMODULE|UNLOADMODULE|INFORMATION|GETTHUMBPRINT)$/) {
         my ($code, $response, $response_type) = $self->{internal_register}->{lc($action)}->(
             gorgone => $self,
             gorgone_config => $self->{config}->{configuration}->{gorgone},
@@ -653,8 +685,7 @@ sub router_internal_event {
             identity => $identity,
             router_type => 'internal',
         );
-        gorgone::standard::library::zmq_core_response(
-            socket => $gorgone->{internal_socket},
+        $gorgone->send_internal_response(
             identity => $identity,
             response_type => $response_type,
             data => $response,
@@ -758,8 +789,7 @@ sub send_message_parent {
     my (%options) = @_;
 
     if ($options{router_type} eq 'internal') {
-        gorgone::standard::library::zmq_core_response(
-            socket => $gorgone->{internal_socket},
+        $gorgone->send_internal_response(
             identity => $options{identity},
             response_type => $options{response_type},
             data => $options{data},

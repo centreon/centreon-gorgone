@@ -151,15 +151,20 @@ sub send_internal_action {
     if ($self->{internal_crypt}->{enabled} == 1) {
         my $identity = gorgone::standard::library::zmq_get_routing_id(socket => $socket);
 
-        if (!defined($self->{internal_crypt}->{identity_keys}->{$identity})) {
+        if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
+            (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})
+            ) {
             my ($rv, $key) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
             ($rv) = $self->send_internal_key(socket => $socket, key => $key, encrypt_key => $self->{internal_crypt}->{core_key});
             return undef if ($rv == -1);
-            $self->{internal_crypt}->{identity_keys}->{$identity} = $key;
+            $self->{internal_crypt}->{identity_keys}->{$identity} = {
+                key => $key,
+                ctime => time()
+            };
         }
 
         eval {
-            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{$identity}, $self->{internal_crypt}->{iv});
+            $message = $self->{cipher}->encrypt($message, $self->{internal_crypt}->{identity_keys}->{$identity}->{key}, $self->{internal_crypt}->{iv});
         };
         if ($@) {
             $self->{logger}->writeLogError("[$self->{module_id}] encrypt issue: " .  $@);

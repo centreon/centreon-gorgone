@@ -90,7 +90,7 @@ sub class_handle_DIE {
 sub handle_DIE {
     my ($self, $msg) = @_;
 
-    $self->{logger}->writeLogError("[$self->{module_id}] $self->{container}Receiving DIE: $msg");
+    $self->{logger}->writeLogError("[$self->{module_id}]$self->{container} Receiving DIE: $msg");
 }
 
 sub generate_token {

@@ -159,17 +159,17 @@ sub connect {
             vector => $self->{clients}->{ $options{id} }->{vector},
             client_pubkey => 
                 defined($self->{clients}->{ $options{id} }->{client_pubkey}) && $self->{clients}->{ $options{id} }->{client_pubkey} ne ''
-                    ? $self->{clients}->{ $options{id} }->{client_pubkey} : $self->{config_core}->{pubkey},
+                    ? $self->{clients}->{ $options{id} }->{client_pubkey} : $self->get_core_config(name => 'pubkey'),
             client_privkey =>
                 defined($self->{clients}->{ $options{id} }->{client_privkey}) && $self->{clients}->{ $options{id} }->{client_privkey} ne ''
-                    ? $self->{clients}->{ $options{id} }->{client_privkey} : $self->{config_core}->{privkey},
+                    ? $self->{clients}->{ $options{id} }->{client_privkey} : $self->get_core_config(name => 'privkey'),
             target_type => defined($self->{clients}->{ $options{id} }->{target_type}) ?
                 $self->{clients}->{ $options{id} }->{target_type} :
                 'tcp',
             target_path => defined($self->{clients}->{ $options{id} }->{target_path}) ?
                 $self->{clients}->{ $options{id} }->{target_path} :
                 $self->{clients}->{ $options{id} }->{address} . ':' . $self->{clients}->{ $options{id} }->{port},
-            config_core => $self->{config_core},
+            config_core =>  $self->get_core_config(),
             logger => $self->{logger}
         );
         $self->{clients}->{ $options{id} }->{class}->init(callback => \&read_message_client);
@@ -232,8 +232,8 @@ sub action_proxyaddnode {
             zmq_type => 'ZMQ_DEALER',
             name => 'gorgone-proxy-channel-' . $data->{id},
             logger => $self->{logger},
-            type => $self->{config_core}->{internal_com_type},
-            path => $self->{config_core}->{internal_com_path}
+            type => $self->get_core_config(name => 'internal_com_type'),
+            path => $self->get_core_config(name => 'internal_com_path')
         );
         $self->send_internal_action(
             action => 'PROXYREADY',
@@ -503,8 +503,8 @@ sub run {
         zmq_type => 'ZMQ_DEALER',
         name => 'gorgone-proxy-' . $self->{pool_id},
         logger => $self->{logger},
-        type => $self->{config_core}->{internal_com_type},
-        path => $self->{config_core}->{internal_com_path}
+        type => $self->get_core_config(name => 'internal_com_type'),
+        path => $self->get_core_config(name => 'internal_com_path')
     );
     $self->send_internal_action(
         action => 'PROXYREADY',

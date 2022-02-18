@@ -49,24 +49,27 @@ sub new {
     $self->{logger} = $options{logger};
     $self->{config} = $options{config};
     $self->{exit_timeout} = (defined($options{config}->{exit_timeout}) && $options{config}->{exit_timeout} =~ /(\d+)/) ? $1 : 30;
-    $self->{config_core} = $options{config_core}->{gorgonecore};
+    $self->{config_core} = $options{config_core};
     $self->{config_db_centreon} = $options{config_db_centreon};
     $self->{config_db_centstorage} = $options{config_db_centstorage};
     $self->{stop} = 0;
     $self->{fork} = 0;
 
     $self->{internal_crypt} = { enabled => 0 };
-    if ($self->{config_core}->{internal_com_crypt} == 1) {
-        $self->{cipher} = Crypt::Mode::CBC->new($self->{config_core}->{internal_com_cipher}, $self->{config_core}->{internal_com_padding});
+    if ($self->get_core_config(name => 'internal_com_crypt') == 1) {
+        $self->{cipher} = Crypt::Mode::CBC->new(
+            $self->get_core_config(name => 'internal_com_cipher'),
+            $self->get_core_config(name => 'internal_com_padding')
+        );
 
         $self->{internal_crypt} = {
             enabled => 1,
-            rotation => $self->{config_core}->{internal_com_rotation},
-            cipher => $self->{config_core}->{internal_com_cipher},
-            padding => $self->{config_core}->{internal_com_padding},
-            iv => $self->{config_core}->{internal_com_iv},
-            core_keys => [$self->{config_core}->{internal_com_core_key}, $self->{config_core}->{internal_com_core_oldkey}],
-            identity_keys => $self->{config_core}->{internal_com_identity_keys}
+            rotation => $self->get_core_config(name => 'internal_com_rotation'),
+            cipher => $self->get_core_config(name => 'internal_com_cipher'),
+            padding => $self->get_core_config(name => 'internal_com_padding'),
+            iv => $self->get_core_config(name => 'internal_com_iv'),
+            core_keys => [$self->get_core_config(name => 'internal_com_core_key'), $self->get_core_config(name => 'internal_com_core_oldkey')],
+            identity_keys => $self->get_core_config(name => 'internal_com_identity_keys')
         };
     }
 
@@ -103,6 +106,14 @@ sub set_fork {
     my ($self, %options) = @_;
 
     $self->{fork} = 1;
+}
+
+sub get_core_config {
+    my ($self, %options) = @_;
+
+    return $self->{config_core}->{gorgonecore} if (!defined($options{name}));
+
+    return $self->{config_core}->{gorgonecore}->{ $options{name} };
 }
 
 sub read_message {
@@ -170,7 +181,9 @@ sub send_internal_action {
         if ($self->{fork} == 0) {
             if (!defined($self->{internal_crypt}->{identity_keys}->{$identity}) || 
                 (time() - $self->{internal_crypt}->{identity_keys}->{$identity}->{ctime}) > ($self->{internal_crypt}->{rotation})) {
-                my ($rv, $genkey) = gorgone::standard::library::generate_symkey(keysize => $self->{config_core}->{internal_com_keysize});
+                my ($rv, $genkey) = gorgone::standard::library::generate_symkey(
+                    keysize => $self->get_core_config(name => 'internal_com_keysize')
+                );
                 ($rv) = $self->send_internal_key(
                     socket => $socket,
                     key => $genkey,

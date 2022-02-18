@@ -103,7 +103,7 @@ sub exit_process {
 
     $self->{client}->send_message(
         action => 'UNREGISTERNODES',
-        data => { nodes => [ { id => $self->{config_core}->{id} } ] }, 
+        data => { nodes => [ { id => $self->get_core_config(name => 'id') } ] }, 
         json_encode => 1
     );
     $self->{client}->close();
@@ -122,7 +122,7 @@ sub ping {
     $self->{client}->ping(
         poll => $self->{poll},
         action => 'REGISTERNODES',
-        data => { nodes => [ { id => $self->{config_core}->{id}, type => 'pull', identity => $self->{client}->get_connect_identity() } ] },
+        data => { nodes => [ { id => $self->get_core_config(name => 'id'), type => 'pull', identity => $self->{client}->get_connect_identity() } ] },
         json_encode => 1
     );
 }
@@ -182,8 +182,8 @@ sub run {
         zmq_type => 'ZMQ_DEALER',
         name => 'gorgone-pull',
         logger => $self->{logger},
-        type => $self->{config_core}->{internal_com_type},
-        path => $self->{config_core}->{internal_com_path}
+        type => $self->get_core_config(name => 'internal_com_type'),
+        path => $self->get_core_config(name => 'internal_com_path')
     );
     $self->send_internal_action(
         action => 'PULLREADY',
@@ -196,13 +196,13 @@ sub run {
         vector => $self->{config}->{vector},
         client_pubkey => 
             defined($self->{config}->{client_pubkey}) && $self->{config}->{client_pubkey} ne '' ?
-                $self->{config}->{client_pubkey} : $self->{config_core}->{pubkey},
+                $self->{config}->{client_pubkey} : $self->get_core_config(name => 'pubkey'),
         client_privkey =>
             defined($self->{config}->{client_privkey}) && $self->{config}->{client_privkey} ne '' ?
-                $self->{config}->{client_privkey} : $self->{config_core}->{privkey},
+                $self->{config}->{client_privkey} : $self->get_core_config(name => 'privkey'),
         target_type => $self->{config}->{target_type},
         target_path => $self->{config}->{target_path},
-        config_core => $self->{config_core},
+        config_core => $self->get_core_config(),
         logger => $self->{logger},
         ping => $self->{config}->{ping},
         ping_timeout => $self->{config}->{ping_timeout}
@@ -211,7 +211,7 @@ sub run {
 
     $self->{client}->send_message(
         action => 'REGISTERNODES',
-        data => { nodes => [ { id => $self->{config_core}->{id}, type => 'pull', identity => $self->{client}->get_connect_identity() } ] },
+        data => { nodes => [ { id => $self->get_core_config(name => 'id'), type => 'pull', identity => $self->{client}->get_connect_identity() } ] },
         json_encode => 1
     );
 

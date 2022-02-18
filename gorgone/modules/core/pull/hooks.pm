@@ -22,7 +22,9 @@ package gorgone::modules::core::pull::hooks;
 
 use warnings;
 use strict;
-use JSON::XS;
+use gorgone::class::core;
+use gorgone::modules::core::pull::class;
+use gorgone::standard::constants qw(:all);
 
 use constant NAMESPACE => 'core';
 use constant NAME => 'pull';
@@ -39,7 +41,7 @@ sub register {
     my (%options) = @_;
 
     $config = $options{config};
-    $config_core = $options{config_core}->{gorgonecore};
+    $config_core = $options{config_core};
     return (1, NAMESPACE, NAME, EVENTS);
 }
 

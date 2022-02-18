@@ -32,7 +32,7 @@ use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use JSON::XS;
 
-my %handlers = (TERM => {}, HUP => {}, DIE => {});
+my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
 sub new {
@@ -53,8 +53,6 @@ sub set_signal_handlers {
     $handlers{TERM}->{$self} = sub { $self->handle_TERM() };
     $SIG{HUP} = \&class_handle_HUP;
     $handlers{HUP}->{$self} = sub { $self->handle_HUP() };
-    $SIG{__DIE__} = \&class_handle_DIE;
-    $handlers{DIE}->{$self} = sub { $self->handle_DIE($_[0]) };
 }
 
 sub handle_HUP {
@@ -64,24 +62,8 @@ sub handle_HUP {
 
 sub handle_TERM {
     my $self = shift;
-    $self->{logger}->writeLogDebug("[pull] $$ Receiving order to stop...");
+    $self->{logger}->writeLogDebug("[pipeline] -class- $$ Receiving order to stop...");
     $self->{stop} = 1;
-}
-
-sub handle_DIE {
-    my $self = shift;
-    my $msg = shift;
-
-    $self->{logger}->writeLogError("[pull] Receiving DIE: $msg");
-    $self->exit_process();
-}
-
-sub class_handle_DIE {
-    my ($msg) = @_;
-
-    foreach (keys %{$handlers{DIE}}) {
-        &{$handlers{DIE}->{$_}}($msg);
-    }
 }
 
 sub class_handle_TERM {
@@ -151,7 +133,7 @@ sub transmit_back {
     return undef;
 }
 
-sub read_message {
+sub read_message_client {
     my (%options) = @_;
 
     # We skip. Dont need to send it in gorgone-core
@@ -160,7 +142,7 @@ sub read_message {
     }
 
     $connector->{logger}->writeLogDebug("[pull] read message from external: $options{data}");
-    $self->send_internal_action(message => $options{data});
+    $connector->send_internal_action(message => $options{data});
 }
 
 sub event {
@@ -191,7 +173,7 @@ sub run {
     );
 
     $self->{client} = gorgone::class::clientzmq->new(
-        identity => 'gorgone-' . $self->{core_id}, 
+        identity => 'gorgone-' . $self->get_core_config(name => 'id'), 
         cipher => $self->{config}->{cipher}, 
         vector => $self->{config}->{vector},
         client_pubkey => 
@@ -207,7 +189,7 @@ sub run {
         ping => $self->{config}->{ping},
         ping_timeout => $self->{config}->{ping_timeout}
     );
-    $self->{client}->init(callback => \&read_message);
+    $self->{client}->init(callback => \&read_message_client);
 
     $self->{client}->send_message(
         action => 'REGISTERNODES',
@@ -222,7 +204,8 @@ sub run {
             callback => \&event
         },
         $self->{client}->get_poll()
-    ]
+    ];
+
     while (1) {
         my $rv = scalar(zmq_poll($self->{poll}, 5000));
         if ($rv == 0 && $self->{stop} == 1) {

@@ -134,7 +134,7 @@ sub broadcast {
 # Specific functions
 sub create_child {
     my (%options) = @_;
-    
+
     $options{logger}->writeLogInfo("[action] Create module 'action' process");
     my $child_pid = fork();
     if ($child_pid == 0) {

@@ -983,6 +983,109 @@ sub add_zmq_pollin {
     };
 }
 
+sub create_schema {
+    my (%options) = @_;
+
+    $options{logger}->writeLogInfo("[core] create schema $options{version}");
+    my $schema = [
+        q{
+            PRAGMA encoding = "UTF-8"
+        },
+        q{
+            CREATE TABLE `gorgone_information` (
+              `key` varchar(1024) DEFAULT NULL,
+              `value` varchar(1024) DEFAULT NULL
+            );
+        },
+        qq{
+            INSERT INTO gorgone_information (`key`, `value`) VALUES ('version', '$options{version}');
+        },
+        q{
+            CREATE TABLE `gorgone_identity` (
+              `id` INTEGER PRIMARY KEY,
+              `ctime` int(11) DEFAULT NULL,
+              `identity` varchar(2048) DEFAULT NULL,
+              `key` varchar(1024) DEFAULT NULL,
+              `oldkey` varchar(1024) DEFAULT NULL,
+              `iv` varchar(1024) DEFAULT NULL,
+              `parent` int(11) DEFAULT '0'
+            );
+        },
+        q{
+            CREATE INDEX idx_gorgone_identity ON gorgone_identity (identity);
+        },
+        q{
+            CREATE INDEX idx_gorgone_parent ON gorgone_identity (parent);
+        },
+        q{
+            CREATE TABLE `gorgone_history` (
+              `id` INTEGER PRIMARY KEY,
+              `token` varchar(2048) DEFAULT NULL,
+              `code` int(11) DEFAULT NULL,
+              `etime` int(11) DEFAULT NULL,
+              `ctime` FLOAT DEFAULT NULL,
+              `instant` int(11) DEFAULT '0',
+              `data` TEXT DEFAULT NULL
+            );
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_id ON gorgone_history (id);
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_token ON gorgone_history (token);
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_etime ON gorgone_history (etime);
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_code ON gorgone_history (code);
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_ctime ON gorgone_history (ctime);
+        },
+        q{
+            CREATE INDEX idx_gorgone_history_instant ON gorgone_history (instant);
+        },
+        q{
+            CREATE TABLE `gorgone_synchistory` (
+              `id` int(11) NOT NULL,
+              `ctime` FLOAT DEFAULT NULL,
+              `last_id` int(11) DEFAULT NULL
+            );
+        },
+        q{
+            CREATE UNIQUE INDEX idx_gorgone_synchistory_id ON gorgone_synchistory (id);
+        },
+        q{
+            CREATE TABLE `gorgone_target_fingerprint` (
+              `id` INTEGER PRIMARY KEY,
+              `target` varchar(2048) DEFAULT NULL,
+              `fingerprint` varchar(4096) DEFAULT NULL
+            );
+        },
+        q{
+            CREATE INDEX idx_gorgone_target_fingerprint_target ON gorgone_target_fingerprint (target);
+        },
+        q{
+            CREATE TABLE `gorgone_centreon_judge_spare` (
+              `cluster_name` varchar(2048) NOT NULL,
+              `status` int(11) NOT NULL,
+              `data` TEXT DEFAULT NULL
+            );
+        },
+        q{
+            CREATE INDEX idx_gorgone_centreon_judge_spare_cluster_name ON gorgone_centreon_judge_spare (cluster_name);
+        }
+    ];
+    foreach (@$schema) {
+        my ($status, $sth) = $options{gorgone}->{db_gorgone}->query($_);
+        if ($status == -1) {
+            $options{logger}->writeLogError("[core] create schema issue");
+            exit(1);
+        }
+    }
+}
+
 sub init_database {
     my (%options) = @_;
 
@@ -1006,89 +1109,56 @@ sub init_database {
         exit(1);
     }
 
-    if (defined($options{autocreate_schema}) && $options{autocreate_schema} == 1) {
-        my $requests = [
+    return if (!defined($options{autocreate_schema}) || $options{autocreate_schema} != 1);
+
+    my $db_version = '1.0';
+    my ($status, $sth) = $options{gorgone}->{db_gorgone}->query(q{SELECT `value` FROM gorgone_information WHERE `key` = 'version'});
+    if ($status == -1) {
+        ($status, $sth) = $options{gorgone}->{db_gorgone}->query(q{SELECT 1 FROM gorgone_identity LIMIT 1});
+        if ($status == -1) {
+            create_schema(gorgone => $options{gorgone}, logger => $options{logger}, version => $options{version});
+            return ;
+        }
+    } else {
+        my $row = $sth->fetchrow_arrayref();
+        $db_version = $row->[0] if (defined($row));
+    }
+
+    $options{logger}->writeLogInfo("[core] update schema $db_version -> $options{version}");
+    
+    if ($db_version eq '1.0') {
+        my $schema = [
             q{
                 PRAGMA encoding = "UTF-8"
             },
             q{
-                CREATE TABLE IF NOT EXISTS `gorgone_identity` (
-                  `id` INTEGER PRIMARY KEY,
-                  `ctime` int(11) DEFAULT NULL,
-                  `identity` varchar(2048) DEFAULT NULL,
-                  `key` varchar(4096) DEFAULT NULL,
-                  `parent` int(11) DEFAULT '0'
+                CREATE TABLE `gorgone_information` (
+                  `key` varchar(1024) DEFAULT NULL,
+                  `value` varchar(1024) DEFAULT NULL
                 );
             },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_identity ON gorgone_identity (identity);
+            qq{
+                INSERT INTO gorgone_information (`key`, `value`) VALUES ('version', '$options{version}');
             },
             q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_parent ON gorgone_identity (parent);
+                ALTER TABLE `gorgone_identity` ADD COLUMN `oldkey` varchar(1024) DEFAULT NULL;
             },
             q{
-                CREATE TABLE IF NOT EXISTS `gorgone_history` (
-                  `id` INTEGER PRIMARY KEY,
-                  `token` varchar(2048) DEFAULT NULL,
-                  `code` int(11) DEFAULT NULL,
-                  `etime` int(11) DEFAULT NULL,
-                  `ctime` FLOAT DEFAULT NULL,
-                  `instant` int(11) DEFAULT '0',
-                  `data` TEXT DEFAULT NULL
-                );
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_id ON gorgone_history (id);
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_token ON gorgone_history (token);
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_etime ON gorgone_history (etime);
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_code ON gorgone_history (code);
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_ctime ON gorgone_history (ctime);
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_history_instant ON gorgone_history (instant);
-            },
-            q{
-                CREATE TABLE IF NOT EXISTS `gorgone_synchistory` (
-                  `id` int(11) NOT NULL,
-                  `ctime` FLOAT DEFAULT NULL,
-                  `last_id` int(11) DEFAULT NULL
-                );
-            },
-            q{
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_gorgone_synchistory_id ON gorgone_synchistory (id);
-            },
-            q{
-                CREATE TABLE IF NOT EXISTS `gorgone_target_fingerprint` (
-                  `id` INTEGER PRIMARY KEY,
-                  `target` varchar(2048) DEFAULT NULL,
-                  `fingerprint` varchar(4096) DEFAULT NULL
-                );
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_target_fingerprint_target ON gorgone_target_fingerprint (target);
-            },
-            q{
-                CREATE TABLE IF NOT EXISTS `gorgone_centreon_judge_spare` (
-                  `cluster_name` varchar(2048) NOT NULL,
-                  `status` int(11) NOT NULL,
-                  `data` TEXT DEFAULT NULL
-                );
-            },
-            q{
-                CREATE INDEX IF NOT EXISTS idx_gorgone_centreon_judge_spare_cluster_name ON gorgone_centreon_judge_spare (cluster_name);
+                ALTER TABLE `gorgone_identity` ADD COLUMN `iv` varchar(1024) DEFAULT NULL;
             }
         ];
-        foreach (@$requests) {
-            $options{gorgone}->{db_gorgone}->query($_);
+        foreach (@$schema) {
+            my ($status, $sth) = $options{gorgone}->{db_gorgone}->query($_);
+            if ($status == -1) {
+                $options{logger}->writeLogError("[core] update schema issue");
+                exit(1);
+            }
         }
+        $db_version = '22.04.0';
+    }
+
+    if ($db_version ne $options{version}) {
+        $options{gorgone}->{db_gorgone}->query("UPDATE gorgone_information SET `value` = '$options{version}' WHERE `key` = 'version'");
     }
 }
         

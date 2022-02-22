@@ -38,12 +38,13 @@ my ($gorgone);
 
 use base qw(gorgone::class::script);
 
-my $VERSION = '1.0';
+my $VERSION = '22.04.0';
 my %handlers = (TERM => {}, HUP => {}, CHLD => {}, DIE => {});
 
 sub new {
     my $class = shift;
-    my $self = $class->SUPER::new('gorgoned',
+    my $self = $class->SUPER::new(
+        'gorgoned',
         centreon_db_conn => 0,
         centstorage_db_conn => 0,
         noconfig => 1
@@ -73,6 +74,12 @@ sub new {
     $self->{config} = 
 
     return $self;
+}
+
+sub get_version {
+    my ($self, %options) = @_;
+
+    return $VERSION;
 }
 
 sub init_server_keys {
@@ -242,6 +249,7 @@ sub init {
         defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{gorgone_db_autocreate_schema}) && $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{gorgone_db_autocreate_schema} =~ /(\d+)/ ? $1 : 1;
     gorgone::standard::library::init_database(
         gorgone => $gorgone,
+        version => $self->get_version(),
         type => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{gorgone_db_type},
         db => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{gorgone_db_name},
         host => $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{gorgone_db_host},

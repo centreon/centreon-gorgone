@@ -74,7 +74,7 @@ stage('Deliver sources // Sonar analysis') {
 }  
 
 try {
-  stage('RPM Packaging') {
+  stage('DEB/RPM Packaging') {
     parallel 'Packaging centos7': {
       node {
         checkoutCentreonBuild(buildBranch)
@@ -95,6 +95,18 @@ try {
       }
     }
 */
+
+    'Debian bullseye packaging and signing': {
+      node("perl") {
+        dir('centreon-gorgone') {
+          checkout scm
+        }
+        sh 'docker run -i --entrypoint /src/centreon-gorgone/ci/scripts/gorgone-deb-package.sh -v "$PWD:/src" -e DISTRIB="Debian11" -e VERSION=$VERSION -e RELEASE=$RELEASE registry.centreon.com/centreon-gorgone-debian11-dependencies:22.04'
+        stash name: 'Debian11', includes: 'Debian11/*.deb'
+        archiveArtifacts artifacts: "Debian11/*"
+      }
+    }
+
     if ((currentBuild.result ?: 'SUCCESS') != 'SUCCESS') {
       error('Package stage failure.');
     }

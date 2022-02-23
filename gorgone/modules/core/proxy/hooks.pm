@@ -781,8 +781,10 @@ sub pull_request {
         );
         return undef;
     }
+
+    my $identity = unpack('H*', $register_nodes->{ $options{target_parent} }->{identity});
     my ($rv, $cipher_infos) = $options{gorgone}->is_handshake_done(
-        identity => unpack('H*', $register_nodes->{ $options{target_parent} }->{identity})
+        identity => $identity
     );
     if ($rv == 0) {
         gorgone::standard::library::add_history(
@@ -797,7 +799,7 @@ sub pull_request {
 
     $options{gorgone}->external_core_response(
         cipher_infos => $cipher_infos,
-        identity => $register_nodes->{ $options{target_parent} }->{identity},
+        identity => $identity,
         message => $message
     );
 }

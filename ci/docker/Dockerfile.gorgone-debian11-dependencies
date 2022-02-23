@@ -8,6 +8,8 @@ ENV LANG en_US.utf8
 RUN apt-get update && apt-get install -y \
 dh-make \
 dh-make-perl \
+libtest-simple-perl \
+libmodule-install-perl \
 aptitude \
 lintian \
 pbuilder \

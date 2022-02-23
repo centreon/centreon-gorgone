@@ -33,6 +33,7 @@ Architecture: any
 Depends:
   centreon-common,
   libnet-ssh2-perl,
+  libnet-ldap-perl,
   libuuid-perl,
   libdigest-md5-file-perl,
   libjson-pp-perl,
@@ -49,6 +50,9 @@ Depends:
   libschedule-cron-perl,
   libhash-merge-perl,
   libcryptx-perl,
+  libmojolicious-perl,
+  libauthen-simple-perl,
+  libauthen-simple-net-perl,
   libzmq-constants-perl,
   libzmq5,
   zmq-libzmq4-perl,

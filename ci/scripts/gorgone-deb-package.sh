@@ -17,7 +17,11 @@ fi
 
 mkdir -p ./tmp
 cd ./tmp
-apt install -y libmodule-install-perl
+apt-cache dumpavail | dpkg --merge-avail
+
+yes | dh-make-perl make --build --version "0.11.3-${RELEASE}" --cpan Mojolicious::Plugin::BasicAuthPlus
+dpkg -i libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb
+
 yes | dh-make-perl make --build --revision ${RELEASE} --cpan ZMQ::Constants
 dpkg -i libzmq-constants-perl_1.04-${RELEASE}_all.deb
 
@@ -48,6 +52,7 @@ if [ -d "$DISTRIB" ] ; then
   rm -rf "$DISTRIB"
 fi
 mkdir $DISTRIB
+mv tmp/libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb $DISTRIB/
 mv tmp/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
 mv tmp/libzmq-constants-perl_1.04-${RELEASE}_all.deb $DISTRIB/
 mv *.deb $DISTRIB/

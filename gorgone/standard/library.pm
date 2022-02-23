@@ -30,8 +30,6 @@ use File::Basename;
 use Crypt::PK::RSA;
 use Crypt::PRNG;
 use Crypt::Mode::CBC;
-use Crypt::CBC;
-use Data::Dumper;
 use File::Path;
 use File::Basename;
 use MIME::Base64;
@@ -188,34 +186,6 @@ sub zmq_core_key_response {
     return 0;
 }
 
-sub zmq_core_response {
-    my (%options) = @_;
-    my $msg;
-    my $response_type = defined($options{response_type}) ? $options{response_type} : 'ACK';
-    
-    if (defined($options{identity})) {
-        zmq_sendmsg($options{socket}, pack('H*', $options{identity}), ZMQ_DONTWAIT | ZMQ_SNDMORE);
-    }
-
-    my $data = json_encode(data => { code => $options{code}, data => $options{data} });
-    # We add 'target' for 'PONG', 'SYNCLOGS'. Like that 'gorgone-proxy can get it
-    $msg = '[' . $response_type . '] [' . (defined($options{token}) ? $options{token} : '') . '] ' . ($response_type =~ /^PONG|SYNCLOGS$/ ? '[] ' : '') . $data;
-    
-    if (defined($options{cipher})) {
-        my $cipher = Crypt::CBC->new(
-            -key    => $options{symkey},
-            -keysize => length($options{symkey}),
-            -cipher => $options{cipher},
-            -iv => $options{vector},
-            -header => 'none',
-            -literal_key => 1
-        );
-        $msg = $cipher->encrypt($msg);
-        $msg = MIME::Base64::encode_base64($msg, '');
-    }
-    zmq_sendmsg($options{socket}, $msg, ZMQ_DONTWAIT);
-}
-
 sub zmq_get_routing_id {
     my (%options) = @_;
 
@@ -234,48 +204,6 @@ sub zmq_events {
     return zmq_getsockopt($options{socket}, ZMQ_EVENTS);
 }
 
-sub cipher_encrypt {
-    my (%options) = @_;
-
-    my $m = Crypt::Mode::CBC->new($options{cipher}, $options{padding});
-    my $ciphertext;
-    eval {
-        $ciphertext = $m->encrypt($options{message}, $options{key}, $options{iv});
-    };
-    if ($@) {
-        if (defined($options{logger})) {
-            $options{logger}->writeLogError("[$options{module}] Sym encrypt issue: " .  $@);
-        }
-        return (-1, $@);
-    }
-    return (0, $ciphertext);
-}
-
-sub uncrypt_message {
-    my (%options) = @_;
-    my $plaintext;
-    
-    my $cipher = Crypt::CBC->new(
-        -key    => $options{symkey},
-        -keysize => length($options{symkey}),
-        -cipher => $options{cipher},
-        -iv => $options{vector},
-        -header => 'none',
-        -literal_key => 1
-    );
-    eval {
-        my $cryptedmessage = MIME::Base64::decode_base64($options{message});
-        $plaintext = $cipher->decrypt($cryptedmessage);
-    };
-    if ($@) {
-        if (defined($options{logger})) {
-            $options{logger}->writeLogError("[core] Sym encrypt issue: " .  $@);
-        }
-        return (-1, $@);
-    }
-    return (0, $plaintext);
-}
-
 sub generate_token {
     my (%options) = @_;
 
@@ -289,28 +217,6 @@ sub generate_symkey {
     
     my $random_key = Crypt::PRNG::random_bytes($options{keysize});
     return (0, $random_key);
-}
-
-sub client_get_secret {
-    my (%options) = @_;
-    my $plaintext;
-
-    eval {
-        my $cryptedtext = MIME::Base64::decode_base64($options{message});
-        $plaintext = $options{privkey}->decrypt($cryptedtext, 'v1.5');
-    };
-    if ($@) {
-        return (-1, "Decoding issue: $@");
-    }
-
-    $plaintext = unpack('H*', $plaintext);
-    if ($plaintext !~ /^5b(.*?)5d(.*?)5b(.*?)5d(.*?)5b(.*)5d$/i) {
-        return (-1, 'Wrong protocol');
-    }
-
-    my $hostname = pack('H*', $3);
-    my $symkey = pack('H*', $5);
-    return (0, 'ok', $symkey, $hostname);
 }
 
 sub client_helo_encrypt {
@@ -378,18 +284,6 @@ sub is_client_can_connect {
 
     $options{logger}->writeLogInfo("[core] Connection from $client");
     return (0, $client_pubkey);
-}
-
-sub is_handshake_done {
-    my (%options) = @_;
-    
-    my ($status, $sth) = $options{dbh}->query("SELECT `key` FROM gorgone_identity WHERE identity = " . $options{dbh}->quote($options{identity}) . " ORDER BY id DESC LIMIT 1");
-    return if ($status == -1);
-    if (my $row = $sth->fetchrow_hashref()) {
-        return 0 if (!defined($row->{key}) || $row->{key} eq '');
-        return (1, pack('H*', $row->{key}));
-    }
-    return 0;
 }
 
 #######################
@@ -689,7 +583,7 @@ sub update_identity {
     my (%options) = @_;
 
     my ($status, $sth) = $options{dbh}->query(
-        "UPDATE gorgone_identity SET `ctime` = " . $options{dbh}->quote(time()) .
+        "UPDATE gorgone_identity SET `mtime` = " . $options{dbh}->quote(time()) .
         " WHERE `identity` = " . $options{dbh}->quote($options{identity}) . " AND " .
         " `id` = (SELECT `id` FROM gorgone_identity WHERE `identity` = " . $options{dbh}->quote($options{identity}) . " ORDER BY `id` DESC LIMIT 1)"
     );
@@ -699,11 +593,14 @@ sub update_identity {
 sub add_identity {
     my (%options) = @_;
 
+    my $time = time();
     my ($status, $sth) = $options{dbh}->query(
-        "INSERT INTO gorgone_identity (`ctime`, `identity`, `key`) VALUES (" . 
-        $options{dbh}->quote(time()) . ", " .
+        "INSERT INTO gorgone_identity (`ctime`, `mtime`, `identity`, `key`, `iv`) VALUES (" . 
+        $options{dbh}->quote($time) . ", " .
+        $options{dbh}->quote($time) . ", " .
         $options{dbh}->quote($options{identity}) . ", " .
-        $options{dbh}->quote(unpack('H*', $options{symkey})) . ")"
+        $options{dbh}->quote(unpack('H*', $options{key})) . ", " .
+        $options{dbh}->quote(unpack('H*', $options{iv})) . ")",
     );
     return $status;
 }
@@ -775,7 +672,7 @@ sub json_decode {
     };
     if ($@) {
         if (defined($options{logger})) {
-            $options{logger}->writeLogError("[core] Cannot decode json data: $@");
+            $options{logger}->writeLogError("[$options{module}] Cannot decode json data: $@");
         }
         return undef;
     }
@@ -871,63 +768,6 @@ sub build_protocol {
     return '[' . $action . '] [' . $token . '] [' . $target . '] ' . $data;
 }
 
-sub zmq_send_internal_message {
-    my (%options) = @_;
-    my ($message, $rv) = ($options{message});
-
-    if (!defined($message)) {
-        $message = build_protocol(%options);
-    }
-    if (defined($options{identity})) {
-        zmq_sendmsg($options{socket}, $options{identity}, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-    }
-
-    if (defined($options{internal_crypt}) && $options{internal_crypt}->{enable} == 1) {
-        my $key = $options{internal_crypt}->{symkeys}->{ $options{internal_crypt}->{current} };
-        if (defined($options{identity})) {
-            if (defined($options{internal_crypt}->{identity}->{ $options{identity} })) {
-                $key = $options{internal_crypt}->{symkeys}->{ $options{internal_crypt}->{identity}->{ $options{identity} } };
-            }
-        }
-        ($rv, $message) = cipher_encrypt(
-            logger => $options{logger},
-            module => $options{module_id},
-            key => $key,
-            cipher => $options{internal_crypt}->{cipher},
-            padding => $options{internal_crypt}->{padding},
-            iv => $options{internal_crypt}->{iv}
-        );
-        return if ($rv == -1);
-    }
-
-    zmq_sendmsg($options{socket}, $message, ZMQ_DONTWAIT);
-}
-
-sub zmq_send_message {
-    my (%options) = @_;
-    my $message = $options{message};
-
-    if (!defined($message)) {
-        $message = build_protocol(%options);
-    }
-    if (defined($options{identity})) {
-        zmq_sendmsg($options{socket}, $options{identity}, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-    }    
-    if (defined($options{cipher})) {
-        my $cipher = Crypt::CBC->new(
-            -key    => $options{symkey},
-            -keysize => length($options{symkey}),
-            -cipher => $options{cipher},
-            -iv => $options{vector},
-            -header => 'none',
-            -literal_key => 1
-        );
-        $message = $cipher->encrypt($message);
-        $message = MIME::Base64::encode_base64($message, '');
-    }
-    zmq_sendmsg($options{socket}, $message, ZMQ_DONTWAIT);
-}
-
 sub zmq_dealer_read_message {
     my (%options) = @_;
 
@@ -1004,6 +844,7 @@ sub create_schema {
             CREATE TABLE `gorgone_identity` (
               `id` INTEGER PRIMARY KEY,
               `ctime` int(11) DEFAULT NULL,
+              `mtime` int(11) DEFAULT NULL,
               `identity` varchar(2048) DEFAULT NULL,
               `key` varchar(1024) DEFAULT NULL,
               `oldkey` varchar(1024) DEFAULT NULL,
@@ -1139,6 +980,9 @@ sub init_database {
             },
             qq{
                 INSERT INTO gorgone_information (`key`, `value`) VALUES ('version', '$options{version}');
+            },
+            q{
+                ALTER TABLE `gorgone_identity` ADD COLUMN `mtime` int(11) DEFAULT NULL DEFAULT NULL;
             },
             q{
                 ALTER TABLE `gorgone_identity` ADD COLUMN `oldkey` varchar(1024) DEFAULT NULL;

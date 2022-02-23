@@ -319,15 +319,17 @@ sub event {
                 );
             }
         } else {
-            my ($status, $data) = $connectors->{ $options{identity} }->decrypt_message(message => $message);
+            my ($rv, $data) = $connectors->{ $options{identity} }->decrypt_message(message => $message);
 
-            if ($status == -1 || $data !~ /^\[(.+?)\]\s+\[(.*?)\]\s+(?:\[(.*?)\]\s*(.*)|(.*))$/m) {
-                $connectors->{$options{identity}}->{handshake} = -1;
-                $connectors->{$options{identity}}->{verbose_last_message} = 'decrypt issue: ' . $data;
+            if ($rv == -1 || $data !~ /^\[([a-zA-Z0-9:\-_]+?)\]\s+/) {
+                $connectors->{ $options{identity} }->{handshake} = -1;
+                $connectors->{ $options{identity} }->{verbose_last_message} = 'decrypt issue: ' . $data;
                 return ;
             }
 
-            if (defined($callbacks->{$options{identity}})) {
+            if ($1 eq 'KEY') {
+                ($rv) = $connectors->{ $options{identity} }->read_key_protocol(text => $data);
+            } elsif (defined($callbacks->{$options{identity}})) {
                 $callbacks->{$options{identity}}->(identity => $options{identity}, data => $data);
             }
         }        

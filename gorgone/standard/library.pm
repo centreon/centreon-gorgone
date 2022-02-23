@@ -579,7 +579,30 @@ sub kill {
 # Database functions
 #######################
 
-sub update_identity {
+sub update_identity_attrs {
+    my (%options) = @_;
+
+    my $values = [];
+    foreach ('key', 'oldkey', 'iv', 'oldiv', 'ctime') {
+        next if (!defined($options{$_}));
+
+        if ($options{$_} eq 'NULL') {
+            push @$values, "`$_` = NULL";
+        } else {
+            push @$values, "`$_` = " . $options{dbh}->quote($options{$_});
+        }
+    }
+
+    my ($status, $sth) = $options{dbh}->query(
+        "UPDATE gorgone_identity SET " .
+        join(', ', @$values) .
+        " WHERE `identity` = " . $options{dbh}->quote($options{identity}) . " AND " .
+        " `id` = (SELECT `id` FROM gorgone_identity WHERE `identity` = " . $options{dbh}->quote($options{identity}) . " ORDER BY `id` DESC LIMIT 1)"
+    );
+    return $status;
+}
+
+sub update_identity_mtime {
     my (%options) = @_;
 
     my ($status, $sth) = $options{dbh}->query(
@@ -849,6 +872,7 @@ sub create_schema {
               `key` varchar(1024) DEFAULT NULL,
               `oldkey` varchar(1024) DEFAULT NULL,
               `iv` varchar(1024) DEFAULT NULL,
+              `oldiv` varchar(1024) DEFAULT NULL,
               `parent` int(11) DEFAULT '0'
             );
         },
@@ -986,6 +1010,9 @@ sub init_database {
             },
             q{
                 ALTER TABLE `gorgone_identity` ADD COLUMN `oldkey` varchar(1024) DEFAULT NULL;
+            },
+            q{
+                ALTER TABLE `gorgone_identity` ADD COLUMN `oldiv` varchar(1024) DEFAULT NULL;
             },
             q{
                 ALTER TABLE `gorgone_identity` ADD COLUMN `iv` varchar(1024) DEFAULT NULL;

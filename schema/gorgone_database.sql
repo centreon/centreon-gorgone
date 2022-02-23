@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `gorgone_identity` (
   `key` varchar(1024) DEFAULT NULL,
   `oldkey` varchar(1024) DEFAULT NULL,
   `iv` varchar(1024) DEFAULT NULL,
+  `oldiv` varchar(1024) DEFAULT NULL,
   `parent` int(11) DEFAULT '0'
 );
 

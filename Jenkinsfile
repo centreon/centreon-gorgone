@@ -104,7 +104,7 @@ try {
     stage('Delivery') {
       node {
         checkoutCentreonBuild(buildBranch)
-//        unstash 'rpms-alma8'
+        unstash 'rpms-alma8'
         unstash 'rpms-centos7'
         sh "./centreon-build/jobs/gorgone/${serie}/gorgone-delivery.sh"
       }

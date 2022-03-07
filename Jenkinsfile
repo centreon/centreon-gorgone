@@ -83,7 +83,7 @@ try {
         stash name: "rpms-centos7", includes: 'output/noarch/*.rpm'
         sh 'rm -rf output'
       }
-    }
+    },
 
     'Packaging alma8': {
       node {

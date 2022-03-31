@@ -117,6 +117,7 @@ sub wss_connect {
     return if ($connector->{connected} == 1);
 
     $self->{ua} = Mojo::UserAgent->new();
+    $self->{ua}->transactor->name('gorgone mojo');
 
     my $proto = 'ws';
     if (defined($self->{config}->{ssl}) && $self->{config}->{ssl} eq 'true') {

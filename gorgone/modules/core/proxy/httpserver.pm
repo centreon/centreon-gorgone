@@ -46,7 +46,8 @@ websocket '/' => sub {
     $connector->{ws_clients}->{ $mojo->tx->connection } = {
         tx => $mojo->tx,
         logged => 0,
-        last_update => time()
+        last_update => time(),
+        authentication => $mojo->tx->req->headers->header('authentication')
     };
 
     $mojo->on(message => sub {
@@ -313,6 +314,16 @@ sub is_logged_websocket {
 
     return 1 if ($self->{ws_clients}->{ $options{ws_id} }->{logged} == 1);
 
+    if (!defined($self->{ws_clients}->{ $options{ws_id} }->{authentication}) || 
+        $self->{ws_clients}->{ $options{ws_id} }->{authentication} !~ /^\s*Bearer\s+$self->{config}->{httpserver}->{token}/) {
+        $self->close_websocket(
+            code => 500,
+            message  => 'token authentication unallowed',
+            ws_id => $options{ws_id}
+        );
+        return 0;
+    }
+
     if ($options{data} !~ /^\[REGISTERNODES\]\s+\[(?:.*?)\]\s+\[.*?\]\s+(.*)/ms) {
         $self->close_websocket(
             code => 500,
@@ -330,15 +341,6 @@ sub is_logged_websocket {
         $self->close_websocket(
             code => 500,
             message  => 'decode error: unsupported format',
-            ws_id => $options{ws_id}
-        );
-        return 0;
-    }
-
-    if (!defined($content->{nodes}->[0]->{token}) || $content->{nodes}->[0]->{token} ne $self->{config}->{httpserver}->{token}) {
-        $self->close_websocket(
-            code => 500,
-            message  => 'please set token',
             ws_id => $options{ws_id}
         );
         return 0;

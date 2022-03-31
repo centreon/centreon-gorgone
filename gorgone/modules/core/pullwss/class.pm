@@ -101,7 +101,6 @@ sub ping {
                 {
                     id => $self->get_core_config(name => 'id'),
                     type => 'wss',
-                    token => $self->{config}->{token},
                     identity => $self->get_core_config(name => 'id')
                 }
             ]
@@ -126,7 +125,7 @@ sub wss_connect {
     }
 
     $self->{ua}->websocket(
-        $proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '/' => sub {
+        $proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '/' => { Authentication => 'Bearer ' . $self->{config}->{token} } => sub {
             my ($ua, $tx) = @_;
 
             $connector->{tx} = $tx;

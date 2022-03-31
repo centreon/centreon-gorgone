@@ -54,6 +54,8 @@ websocket '/' => sub {
 
         $connector->{ws_clients}->{ $mojo->tx->connection }->{last_update} = time();
 
+        $connector->{logger}->writeLogDebug("[proxy] httpserver receiving message: " . $msg);
+
         my $rv = $connector->is_logged_websocket(ws_id => $mojo->tx->connection, data => $msg);
         return if ($rv == 0);
 

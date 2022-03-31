@@ -161,7 +161,7 @@ sub handle_HUP {
 
 sub handle_TERM {
     my $self = shift;
-    $self->{logger}->writeLogDebug("[httpserver] $$ Receiving order to stop...");
+    $self->{logger}->writeLogDebug("[httpserverng] $$ Receiving order to stop...");
     $self->{stop} = 1;
 }
 

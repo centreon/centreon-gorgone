@@ -819,7 +819,7 @@ sub create_httpserver_child {
         $module->run();
         exit(0);
     }
-    $options{logger}->writeLogDebug("[proxy] PID $child_pid (gorgone-proxy-httpserver) for pool id");
+    $options{logger}->writeLogDebug("[proxy] PID $child_pid (gorgone-proxy-httpserver)");
     $httpserver = { pid => $child_pid, ready => 0, running => 1 };
 }
 

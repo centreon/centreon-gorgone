@@ -46,6 +46,7 @@ sub new {
         $self->{dsn} =~ s/"\s*$//;
     }
 
+    $self->{tryTiny} = defined($options{tryTiny}) ? 1 : 0;
     $self->{instance} = undef;
     $self->{transaction_begin} = 0;
     $self->{args} = [];
@@ -293,10 +294,10 @@ sub error {
     my ($package, $filename, $line) = caller 1;
 
     chomp($query);
-    $self->{logger}->writeLogError(<<"EOE");
-SQL error: $error (caller: $package:$filename:$line)
+    $self->{lastError} = "SQL error: $error (caller: $package:$filename:$line)
 Query: $query
-EOE
+";
+    $self->{logger}->writeLogError($error);
     if ($self->{transaction_begin} == 1) {
         $self->rollback();
     }
@@ -353,6 +354,10 @@ sub query {
         last;
     }
 
+    if ($self->{tryTiny} == 1) {
+        die $self->{lastError} if ($status == -1);
+        return $statement_handle;
+    }
     return ($status, $statement_handle);
 }
 

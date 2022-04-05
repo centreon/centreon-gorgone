@@ -10,11 +10,11 @@
 #
 ##################################################
 
+package gorgone::modules::centreon::mbi::libs::bi::Time;
+
 use strict;
 use warnings;
 use POSIX;
-
-package gorgone::modules::centreon::mbi::libs::bi::Time;
 
 # Constructor
 # parameters:
@@ -24,12 +24,12 @@ package gorgone::modules::centreon::mbi::libs::bi::Time;
 sub new {
 	my $class = shift;
 	my $self  = {};
-	$self->{"logger"}	= shift;
-	$self->{"centstorage"} = shift;
+	$self->{logger}	= shift;
+	$self->{centstorage} = shift;
 	if (@_) {
-		$self->{"centreon"}  = shift;
+		$self->{centreon}  = shift;
 	}
-	$self->{'insertQuery'} = "INSERT IGNORE INTO `mod_bi_time` (id, hour, day, month_label, month, year, week, dayofweek, utime, dtime) VALUES ";
+	$self->{insertQuery} = "INSERT IGNORE INTO `mod_bi_time` (id, hour, day, month_label, month, year, week, dayofweek, utime, dtime) VALUES ";
 	bless $self, $class;
 	return $self;
 }
@@ -105,56 +105,54 @@ sub getDayOfWeek {
 
 sub getYesterdayTodayDate {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
 	
 	# get yesterday date. date format : YYYY-MM-DD
-	my $sth = $db->query("SELECT CURRENT_DATE() as today, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) as yesterday");
+	my $sth = $self->{centstorage}->query("SELECT CURRENT_DATE() as today, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) as yesterday");
+
 	my $yesterday;
 	my $today;
 	if (my $row = $sth->fetchrow_hashref()) {
-		$yesterday = $row->{"yesterday"};
-		$today =  $row->{"today"};
-	}else {
-		$logger->writeLog("ERROR", "TIME: cannot get yesterday date");
+		$yesterday = $row->{yesterday};
+		$today =  $row->{today};
+	} else {
+        die "TIME: cannot get yesterday date";
 	}
 	if (!defined($yesterday)) {
-		$logger->writeLog("ERROR", "TIME: Yesterday start date is null");
+        die "TIME: Yesterday start date is null";
 	}
 	if (!defined($today)) {
-		$logger->writeLog("ERROR", "TIME: today start date is null");
+        die "TIME: today start date is null";
 	}
 	return ($yesterday, $today);
 }
 
 sub addDateInterval {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
 	my ($date, $interval, $intervalType) = @_;
+
 	# get new date. date format : YYYY-MM-DD
-	my $sth = $db->query("SELECT DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") as newDate");
+	my $sth = $self->{centstorage}->query("SELECT DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") as newDate");
+
 	my $newDate;
 	if (my $row = $sth->fetchrow_hashref()) {
-		$newDate = $row->{"newDate"};
+		$newDate = $row->{newDate};
 	}
 	if (!defined($newDate)) {
-		$logger->writeLog("ERROR", "TIME: DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") returns null value");
+        die "TIME: DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") returns null value";
 	}
-	return ($newDate);
+	return $newDate;
 }
 
 sub compareDates {
     my $self = shift;
-    my $logger = $self->{'logger'};
-    my $db = $self->{"centstorage"};
     my ($date1, $date2) = @_;
 
-    my $sth = $db->query("SELECT DATEDIFF('".$date1."','".$date2."') as nbDays");
+    my $sth = $self->{centstorage}->query("SELECT DATEDIFF('".$date1."','".$date2."') as nbDays");
     if (my $row = $sth->fetchrow_hashref()) {
-	return $row->{'nbDays'};
+        return $row->{nbDays};
     }
-    $logger->writeLog("ERROR", "TIME: Cannot compare two dates : ".$date1." and ".$date2); 
+
+    die("TIME: Cannot compare two dates : ".$date1." and ".$date2);
 }
 
 sub insertTimeEntriesForPeriod {

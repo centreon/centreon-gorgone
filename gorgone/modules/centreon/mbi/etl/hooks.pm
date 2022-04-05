@@ -27,7 +27,7 @@ use gorgone::modules::centreon::mbi::etl::class;
 use gorgone::standard::constants qw(:all);
 
 use constant NAMESPACE => 'centreon';
-use constant NAME => 'mbi-etl';
+use constant NAME => 'mbietl';
 use constant EVENTS => [
     { event => 'CENTREONMBIETLRUN', uri => '/run', method => 'POST' },
     { event => 'CENTREONMBIETLREADY' }

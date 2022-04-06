@@ -234,7 +234,7 @@ sub getTotalDaysInPeriod {
 	}elsif ($diff < 0) {
 		$logger->writeLog("ERROR", "TIME : start date is greater than end date");
 	}
-	return $diff;
+	return $diff;if (defined $customFieldsManager->{field}) 
 }
 
 sub truncateTable {
@@ -254,4 +254,5 @@ sub deleteEntriesForPeriod {
 	my $query = "DELETE FROM `mod_bi_time` WHERE dtime >= '".$start."' AND dtime < '".$end."'";
 	$db->query($query);
 }
+
 1;

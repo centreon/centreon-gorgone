@@ -32,7 +32,7 @@ use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use XML::LibXML::Simple;
 use JSON::XS;
-use gorgone::modules::centreon::mbi::etl::import::pilot;
+use gorgone::modules::centreon::mbi::etl::import::main;
 use gorgone::modules::centreon::mbi::libs::centreon::ETLProperties;
 use gorgone::modules::centreon::mbi::libs::bi::Time;
 use Try::Tiny;
@@ -124,6 +124,7 @@ sub db_parse_xml {
     }
     foreach my $profile (@{$content->{profile}}) {
         my $name = lc($profile->{name});
+        $name =~ s/censtorage/centstorage/;
         $dbcon->{$name} = { port => 3306 };
         foreach my $prop (@{$profile->{baseproperties}->{property}}) {
             if ($prop->{name} eq 'odaURL' && $prop->{value} =~ /jdbc\:[a-z]+\:\/\/([^:]*)(\:\d+)?\/(.*)/) {
@@ -141,7 +142,7 @@ sub db_parse_xml {
             }
         }
     }
-    foreach my $profile ('centreon', 'censtorage') {
+    foreach my $profile ('centreon', 'centstorage') {
         die 'cannot find profile ' . $profile if (!defined($dbcon->{$profile}));
         foreach ('host', 'db', 'port', 'user', 'password') {
             die "property $_ for profile $profile must be defined"
@@ -179,12 +180,12 @@ sub run_etl_import {
     my ($self, %options) = @_;
 
     if ((defined($self->{run}->{etlProperties}->{'host.dedicated'}) && $self->{run}->{etlProperties}->{'host.dedicated'} eq 'false')
-        || ($self->{run}->{dbbi}->{censtorage}->{host} . ':' . $self->{run}->{dbbi}->{censtorage}->{port} eq $self->{run}->{dbmon}->{censtorage}->{host} . ':' . $self->{run}->{dbmon}->{censtorage}->{port})
+        || ($self->{run}->{dbbi}->{centstorage}->{host} . ':' . $self->{run}->{dbbi}->{centstorage}->{port} eq $self->{run}->{dbmon}->{centstorage}->{host} . ':' . $self->{run}->{dbmon}->{centstorage}->{port})
         || ($self->{run}->{dbbi}->{centreon}->{host} . ':' . $self->{run}->{dbbi}->{centreon}->{port} eq $self->{run}->{dbmon}->{centreon}->{host} . ':' . $self->{run}->{dbmon}->{centreon}->{port})) {
         die 'Do not execute this script if the reporting engine is installed on the monitoring server. In case of "all in one" installation, do not consider this message';
     }
 
-    gorgone::modules::centreon::mbi::etl::import::pilot::main($self);
+    gorgone::modules::centreon::mbi::etl::import::main::prepare($self);
 }
 
 sub run_etl {
@@ -257,7 +258,7 @@ sub action_centreonmbietlrun {
             type => 'mysql',
             force => 2,
             logger => $self->{logger},
-            tryTiny => 1,
+            die => 1,
             %{$self->{run}->{dbmon}->{centreon}}
         );
         $self->{etlProp} = gorgone::modules::centreon::mbi::libs::centreon::ETLProperties->new($self->{logger}, $self->{run}->{dbmon_centreon_con});
@@ -267,8 +268,8 @@ sub action_centreonmbietlrun {
             type => 'mysql',
             force => 2,
             logger => $self->{logger},
-            tryTiny => 1,
-            %{$self->{run}->{dbbi}->{censtorage}}
+            die => 1,
+            %{$self->{run}->{dbbi}->{centstorage}}
         );
         $self->{run}->{time} = gorgone::modules::centreon::mbi::libs::bi::Time->new($self->{logger}, $self->{run}->{dbbi_centstorage_con});
 

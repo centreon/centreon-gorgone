@@ -40,6 +40,7 @@ use warnings;
 use POSIX;
 use Time::Local;
 use Tie::File;
+use DateTime;
 
 package gorgone::modules::centreon::mbi::libs::Utils;
 
@@ -76,12 +77,60 @@ sub checkBasicOptions {
     }
 }
 
+sub buildCliMysqlArgs {
+    my ($self, $con) = @_;
+
+    my $args = '-u "' . $con->{user} . '" ' .
+        '-p"' . $con->{password} . '" ' . 
+        '-h "' $con->{host} . '" ' .
+		'-P ' . $con->{port};
+    return $args;
+}
+
+sub getRangePartitionDate {
+    my ($self, $start, $end) = @_;
+
+    if ($start !~ /(\d{4})-(\d{2})-(\d{2})/) {
+        die "Verify period start format";
+    }
+    my $dt1 = DateTime->new(year => $1, month => $2, day => $3, hour => 0, minute => 0, second => 0);
+
+    if ($end !~ /(\d{4})-(\d{2})-(\d{2})/) {
+        die "Verify period end format";
+    }
+    my $dt2 = DateTime->new(year => $1, month => $2, day => $3, hour => 0, minute => 0, second => 0);
+
+    my $epoch = $dt1->epoch();
+    my $epoch_end = $dt2->epoch();
+    if ($epoch_end <= $epoch) {
+        die "Period end date is older";
+    }
+
+    my $partitions = [];
+    while ($epoch <= $epoch_end) {
+        $dt1->add(days => 1);
+
+        $epoch = $dt1->epoch();
+        my $month = $dt1->month();
+        $month = '0' . $month if ($month < 10);
+        my $day = $dt1->day();
+        $day = '0' . $day if ($day < 10);
+
+        push @$partitions, {
+            name => $dt1->year() . $month . $day,
+            epoch => $epoch
+        };
+    }
+
+    return $partitions;
+}
 
 sub checkDateFormat {
 	my ($self, $start, $end)= @_;
+
 	if (defined($start) && $start =~  /[1-2][0-9]{3}\-[0-1][0-9]\-[0-3][0-9]/
-			&& defined($end) && $end =~  /[1-2][0-9]{3}\-[0-1][0-9]\-[0-3][0-9]/) {
-				return 1;
+        && defined($end) && $end =~  /[1-2][0-9]{3}\-[0-1][0-9]\-[0-3][0-9]/) {
+        return 1;
 	}
 	return 0;
 }

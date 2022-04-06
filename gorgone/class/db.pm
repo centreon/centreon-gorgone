@@ -46,7 +46,7 @@ sub new {
         $self->{dsn} =~ s/"\s*$//;
     }
 
-    $self->{tryTiny} = defined($options{tryTiny}) ? 1 : 0;
+    $self->{die} = defined($options{die}) ? 1 : 0;
     $self->{instance} = undef;
     $self->{transaction_begin} = 0;
     $self->{args} = [];
@@ -354,7 +354,7 @@ sub query {
         last;
     }
 
-    if ($self->{tryTiny} == 1) {
+    if ($self->{die} == 1) {
         die $self->{lastError} if ($status == -1);
         return $statement_handle;
     }

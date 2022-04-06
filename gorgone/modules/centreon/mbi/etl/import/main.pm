@@ -18,7 +18,7 @@
 # limitations under the License.
 #
 
-package gorgone::modules::centreon::mbi::etl::import::pilot;
+package gorgone::modules::centreon::mbi::etl::import::main;
 
 use strict;
 use warnings;
@@ -28,7 +28,8 @@ use gorgone::modules::centreon::mbi::libs::bi::Loader;
 use gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 use gorgone::modules::centreon::mbi::libs::Utils;
 
-my ($biTables);
+my ($biTables, $monTables, $utils);
+my ($argsMon, $argsBi);
 
 my ($centstorageBI, $centstorage, $centreon, $logger, $dumper, $loader, $etl, $centreonBI, $time);
 my ($hostCentreon, $hostBI);
@@ -37,6 +38,10 @@ sub initVars {
     my ($etl) = @_;
 
     $biTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{logger}, $etl->{run}->{dbbi_centstorage_con});
+    $monTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{logger}, $etl->{run}->{dbmon_centstorage_con});
+    $utils = gorgone::modules::centreon::mbi::libs::Utils->new();
+    $argsMon = $utils->buildCliMysqlArgs($etl->{run}->{dbmon}->{centstorage});
+    $argsBi = $utils->buildCliMysqlArgs($etl->{run}->{dbbi}->{centstorage});
 }
 
 =pod
@@ -86,63 +91,9 @@ sub createNotTimedTables {
 }
 =cut
 
-sub createDataBinTable {
-    my ($etl, $name, $start, $end, $options) = @_;
-
-    my $action = { table => $name, db => 'censtorage', drop => 0, run => 0, parted => 1, actions => [] };
-
-    $etl->{run}->{schedule}->{count}++;
-
-    if ($options->{rebuild} == 1 && $options->{nopurge} == 0) {
-        $action->{drop} = 1;
-    }
-
-    $action->{dump_del_structure} = [
-        ['KEY.*\(\`id_metric\`\)\,', ''],
-        ['KEY.*\(\`id_metric\`\)', ''], 
-        ['\n.*PARTITION.*', ''], 
-        ['\,[\n\s]+\)', '\)']
-    ];
-
-    $action->{not_exist} = [
-        "ALTER TABLE `".$name."` ADD INDEX `idx_data_bin_ctime` (`ctime`)",
-        "ALTER TABLE `".$name."` ADD INDEX `idx_data_bin_idmetric_ctime` (`id_metric`,`ctime`)"
-    ];
-
-    my $runningStart = $etl->{run}->{time}->addDateInterval($start, 1, 'DAY');
-    my $nbDays = $etl->{run}->{time}->compareDates($end, $runningStart);
-
-    $action->{partitions_create} = '';
-    while ($nbDays > 0) {
-        my @partName = split (/\-/, $runningStart);
-        $action->{partitions_create} .= "PARTITION p" . $partName[0] . $partName[1] . $partName[2] . " VALUES LESS THAN (FLOOR(UNIX_TIMESTAMP('" . $runningStart . "'))),";
-        $runningStart = $etl->{run}->{time}->addDateInterval($runningStart, 1, "DAY");
-        $nbDays--;
-    }
-	my @partName = split (/\-/, $runningStart);
-	$action->{partitions_create} .= "PARTITION p".$partName[0].$partName[1].$partName[2]." VALUES LESS THAN (FLOOR(UNIX_TIMESTAMP('" . $runningStart . "'))));";
-
-    if ($biTables->tableExists('data_bin')) {
-        my $range = $biTables->getLastPartRange('data_bin');
-
-		$range = $etl->{run}->{time}->addDateInterval($range, 1, 'DAY');
-        $nbDays = $etl->{run}->{time}->compareDates($end, $range);
-        while ($nbDays >= 0) {
-            my @partName = split (/\-/, $range);
-            $action->{exist} = ["ALTER TABLE `" . $name . "` ADD PARTITION (PARTITION `p".$partName[0].$partName[1].$partName[2]."` VALUES LESS THAN(FLOOR(UNIX_TIMESTAMP('".$range."'))))"];
-            $nbDays--;
-            $range = $etl->{run}->{time}->addDateInterval($range, 1, "DAY");
-		}
-    }
-}
-
 # Create tables for centstorage database on reporting server
 sub createTables {
     my ($etl, $periods, $options, $notTimedTables, $timedTables) = @_;
-
-    if ($options->{ignore_databin} == 0 && $options->{centreon_only} == 0 && (!defined($options->{bam_only}) || $options->{bam_only} == 0)) {
-        createDataBinTable($etl, 'data_bin', ($periods->{raw_perfdata})->{start}, ($periods->{raw_perfdata})->{end}, $options);
-    }
 
 =po
     while (my ($name, $fields) = each %timedTables) {
@@ -288,6 +239,75 @@ sub extractCentreonDB {
 }
 =cut
 
+sub dataBin {
+    my ($etl, $etlProperties, $options, $periods) = @_;
+
+    return if ($options->{ignore_databin} == 1 || $options->{centreon_only} == 1 || (defined($options->{bam_only}) && $options->{bam_only} == 1));
+
+    my $action = { run => 0, type => 1, db => 'centstorage', sql => [], actions => [] };
+
+    my $drop = 0;
+    if ($options->{rebuild} == 1 && $options->{nopurge} == 0) {
+        push @{$action->{sql}}, [ 'drop table data_bin', 'DROP TABLE data_bin' ]
+        $drop = 1;
+    }
+
+    my $isExists = 0;
+    $isExists = 1 if ($biTables->tableExists('data_bin'));
+
+    my $partitionsPerf = $utils->getRangePartitionDate($periods->{raw_perfdata}->{start}, $periods->{raw_perfdata}->{end});
+
+    if ($isExists == 0 || $action->{drop} == 1) {
+        $action->{create} = 1;
+
+        my $structure = $monTables->dumpTableStructure('data_bin');
+        $structure =~ s/KEY.*\(\`id_metric\`\)\,//g;
+        $structure =~ s/KEY.*\(\`id_metric\`\)//g;
+        $structure =~ s/\n.*PARTITION.*//g;
+        $structure =~ s/\,[\n\s]+\)/\)/;
+        $structure .= " PARTITION BY RANGE(`ctime`) (";
+
+        
+        my $append = '';
+        foreach (@$partitionsPerf) {
+            $structure .= $append . "PARTITION p" . $_->{name} . " VALUES LESS THAN (" . $_->{epoch} . ")";
+            $append = ',';
+        }
+        $structure .= ';';
+
+        push @{$action->{sql}},
+            [ 'create table data_bin', $structure ],
+            [ 'create index data_bin ctime', "ALTER TABLE `".$name."` ADD INDEX `idx_data_bin_ctime` (`ctime`)" ],
+            [ 'create index data_bin id_metric/ctime', "ALTER TABLE `".$name."` ADD INDEX `idx_data_bin_idmetric_ctime` (`id_metric`,`ctime`)" ];
+    }
+
+    if ($isExists == 1 && $drop == 0) {
+        my $start = $biTables->getLastPartRange('data_bin');
+        my $partitions = $utils->getRangePartitionDate($start, $periods->{raw_perfdata}->{end});
+        foreach (@$partitions) {
+            push @{$action->{sql}}, 
+                [ 'create data_bin partition ' . $_->{name}, "ALTER TABLE `data_bin` ADD PARTITION (PARTITION `p$_->{name}` VALUES LESS THAN($_->{epoch}))"];
+        }
+    }
+
+    if ($etlProperties->{'statistics.type'} eq 'all' || $etlProperties->{'statistics.type'} eq 'perfdata') {
+        my $overCond = '';
+        foreach (@$partitionsPerf) {
+            my $cmd = sprintf(
+                "mysqldump --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql %s '%s'",
+                $argsMon,
+                $etl->{run}->{dbmon}->{centstorage}->{db},
+                'data_bin',
+                $overCond . 'ctime < ' . $_->{epoch},
+                $argsBi,
+                $etl->{run}->{dbbi}->{centstorage}->{db}
+            );
+            $overCond = 'ctime >= $_->{epoch} AND ';
+            push @{$action->{actions}}, { type => 2, message => 'import data_bin partition ' . $_->{name}, command => $cmd };
+        }
+    }
+}
+
 sub selectTables {
     my ($etl, $etlProperties, $options) = @_;
 
@@ -359,16 +379,10 @@ sub selectTables {
         }
 
     }
-    if (!defined($options->{ignore_databin})
-        && ($etlProperties->{'statistics.type'} eq 'all' || $etlProperties->{'statistics.type'} eq 'perfdata')
-		&& (!defined($options->{bam_only}) || $options->{bam_only} == 0)) {
-        $timedTables{data_bin} = \@ctime;
-    }
-
     return (\@notTimedTables, \%timedTables);
 }
 
-sub main {
+sub prepare {
     my ($etl) = @_;
 
     initVars($etl);
@@ -404,10 +418,18 @@ sub main {
         $etl->{run}->{options}
     );
 
-    return ;
+    dataBin(
+        $etl,
+        $etl->{run}->{etlProperties},
+        $etl->{run}->{options},
+        \%periods
+    );
 
     # create non existing tables
     createTables($etl, \%periods, $etl->{run}->{options}, $notTimedTables, $timedTables);
+
+    return ;
+    
     # If we only need to create empty tables, create them then exit program
     if ($etl->{run}->{options}->{create_tables} == 1) {
       return ;

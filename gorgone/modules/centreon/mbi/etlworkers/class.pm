@@ -31,6 +31,7 @@ use gorgone::class::http::http;
 use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use JSON::XS;
+use Try::Tiny;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -78,14 +79,24 @@ sub class_handle_HUP {
     }
 }
 
-sub action_centreonmbietlrun {
+sub action_centreonmbietlworkersimport {
     my ($self, %options) = @_;
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
-    $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action etl run proceed' });
-
-    return 0;
+    try {
+        #$options{data}->{content}->{params}
+        #$options{data}->{content}->{dbmon}
+        #$options{data}->{content}->{dbbi}
+    } catch {
+        $self->send_log(
+            code => GORGONE_ACTION_FINISH_KO,
+            token => $options{token},
+            data => {
+                message => $_
+            }
+        );
+    };
 }
 
 sub event {
@@ -113,7 +124,7 @@ sub run {
     # Connect internal
     $connector->{internal_socket} = gorgone::standard::library::connect_com(
         zmq_type => 'ZMQ_DEALER',
-        name => 'gorgone-' . $self->{module_id},
+        name => 'gorgone-' . $self->{module_id} . '-' . $self->{pool_id},
         logger => $self->{logger},
         type => $self->get_core_config(name => 'internal_com_type'),
         path => $self->get_core_config(name => 'internal_com_path')

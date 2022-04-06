@@ -34,7 +34,6 @@ use XML::LibXML::Simple;
 use JSON::XS;
 use gorgone::modules::centreon::mbi::etl::import::main;
 use gorgone::modules::centreon::mbi::libs::centreon::ETLProperties;
-use gorgone::modules::centreon::mbi::libs::bi::Time;
 use Try::Tiny;
 
 my %handlers = (TERM => {}, HUP => {});
@@ -153,6 +152,34 @@ sub db_parse_xml {
     return $dbcon;
 }
 
+sub execute_action {
+    my ($self, %options) = @_;
+
+    $self->send_internal_action(
+        action => 'ADDLISTENER',
+        data => [
+            {
+                identity => 'gorgone-' . $self->{module_id},
+                event => 'CENTREONMBIETLLISTENER',
+                token => $self->{module_id} . '-' . $self->{run}->{token} . '-' . $options{substep},
+                timeout => 43200
+            }
+        ]
+    );
+    $self->send_internal_action(
+        action => 'CENTREONMBIETLWORKERSIMPORT',
+        token => $self->{module_id} . '-' . $self->{run}->{token} . '-' . $options{substep},
+        data => {
+            instant => 1,
+            content => {
+                dbmon => $self->{run}->{dbmon},
+                dbbi => $self->{run}->{dbbi},
+                params => $options{params}
+            }
+        }
+    );
+}
+
 sub planning {
     my ($self, %options) = @_;
 
@@ -173,7 +200,48 @@ sub planning {
         $self->{run}->{schedule}->{steps}++;
     }
 
+    $self->{run}->{schedule}->{steps_done} = 0;
     $self->{run}->{schedule}->{planned} = 1;
+}
+
+sub watch_etl_import {
+    my ($self, %options) = @_;
+
+    if ($self->{run}->{schedule}->{import}->{substeps_done} >= $self->{run}->{schedule}->{import}->{substeps}) {
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { message => '[SCHEDULER][IMPORT] finished' });
+        $self->{run}->{schedule}->{import}->{running} = 1;
+        $self->run_etl();
+        return ;
+    }
+
+    while (my ($idx, $val) = each(@{$self->{run}->{schedule}->{import}->{actions}})) {
+        if ($val->{run} == -1) {
+            $self->{logger}->writeLogDebug("[mbi-etl] execute substep import-$idx");
+            $self->{run}->{schedule}->{import}->{actions}->[$idx]->{run} = 0;
+            $self->execute_action(
+                action => 'CENTREONMBIETLWORKERSIMPORT',
+                substep => "import-$idx",
+                params => {
+                    type => $val->{type}, 
+                    db => $val->{db},
+                    sql => $val->{sql},
+                    command => $val->{command}
+                }
+            );
+        } elsif ($val->{run} == 1) {
+            while (my ($idx2, $val2) = each(@{$val->{actions}})) {
+                next if ($val->{run} >= 0);
+
+                $self->{logger}->writeLogDebug("[mbi-etl] execute substep import-$idx-$idx2");
+                $self->{run}->{schedule}->{import}->{actions}->[$idx]->{actions}->[$idx2]->{run} = 0;
+                $self->execute_action(
+                    action => 'CENTREONMBIETLWORKERSIMPORT',
+                    substep => "import-$idx-$idx2",
+                    params => $val2
+                );
+            }
+        }        
+    }
 }
 
 sub run_etl_import {
@@ -185,7 +253,21 @@ sub run_etl_import {
         die 'Do not execute this script if the reporting engine is installed on the monitoring server. In case of "all in one" installation, do not consider this message';
     }
 
+    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { message => '[SCHEDULER][IMPORT] Prepare' });
+
     gorgone::modules::centreon::mbi::etl::import::main::prepare($self);
+
+    $self->{run}->{schedule}->{import}->{substeps_done} = 0;
+    $self->{run}->{schedule}->{import}->{substeps} = 0;
+    foreach (@{$self->{run}->{schedule}->{import}->{actions}}) {
+        $self->{run}->{schedule}->{import}->{substeps}++;
+        my $num = defined($_->{actions}) ? scalar(@{$_->{actions}}) : 0;
+        $self->{run}->{schedule}->{import}->{substeps} += $num if ($num > 0);
+    }
+
+    $self->{logger}->writeLogDebug("[mbi-etl] import substeps = " . $self->{run}->{schedule}->{import}->{substeps});
+
+    $self->watch_etl_import();
 }
 
 sub run_etl {
@@ -194,7 +276,7 @@ sub run_etl {
     if ($self->{run}->{schedule}->{import}->{running} == 0) {
         $self->run_etl_import();
         return ;
-    } elsif ($self->{run}->{schedule}->{import}->{dimensions} == 0) {
+    } elsif ($self->{run}->{schedule}->{dimensions}->{running} == 0) {
         $self->run_etl_dimensions();
         return ;
     }
@@ -230,7 +312,7 @@ sub action_centreonmbietlrun {
     try {
         $options{token} = $self->generate_token() if (!defined($options{token}));
 
-        return $self->runko(token => $options{token}, msg => 'etl currently running') if ($self->{run}->{running} == 1);
+        return $self->runko(token => $options{token}, msg => '[SCHEDULER] already running') if ($self->{run}->{running} == 1);
 
         $self->{run}->{token} = $options{token};
 
@@ -249,7 +331,7 @@ sub action_centreonmbietlrun {
     
         $self->{run}->{options} = $options{data}->{content};
 
-        $self->send_log(code => GORGONE_ACTION_BEGIN, token => $options{token}, data => { message => 'action etl run started' });
+        $self->send_log(code => GORGONE_ACTION_BEGIN, token => $self->{run}->{token}, data => { message => 'action etl run started' });
 
         $self->{run}->{dbmon} = $self->db_parse_xml(file => $self->{cbis_profile}); 
         $self->{run}->{dbbi} = $self->db_parse_xml(file => $self->{reports_profile}); 
@@ -261,9 +343,6 @@ sub action_centreonmbietlrun {
             die => 1,
             %{$self->{run}->{dbmon}->{centreon}}
         );
-        $self->{etlProp} = gorgone::modules::centreon::mbi::libs::centreon::ETLProperties->new($self->{logger}, $self->{run}->{dbmon_centreon_con});
-        ($self->{run}->{etlProperties}, $self->{run}->{dataRetention}) = $self->{etlProp}->getProperties();
-    
         $self->{run}->{dbmon_centstorage_con} = gorgone::class::db->new(
             type => 'mysql',
             force => 2,
@@ -271,7 +350,6 @@ sub action_centreonmbietlrun {
             die => 1,
             %{$self->{run}->{dbmon}->{centstorage}}
         );
-    
         $self->{run}->{dbbi_centstorage_con} = gorgone::class::db->new(
             type => 'mysql',
             force => 2,
@@ -279,18 +357,38 @@ sub action_centreonmbietlrun {
             die => 1,
             %{$self->{run}->{dbbi}->{centstorage}}
         );
-        $self->{run}->{time} = gorgone::modules::centreon::mbi::libs::bi::Time->new($self->{logger}, $self->{run}->{dbbi_centstorage_con});
 
+        $self->{etlProp} = gorgone::modules::centreon::mbi::libs::centreon::ETLProperties->new($self->{logger}, $self->{run}->{dbmon_centreon_con});
+        ($self->{run}->{etlProperties}, $self->{run}->{dataRetention}) = $self->{etlProp}->getProperties();
+    
         $self->planning();
         $self->run_etl();
     } catch {
         $self->runko(msg => $_)
     };
 
-    use Data::Dumper;
-    print Data::Dumper::Dumper($self->{run});
+    #use Data::Dumper;
+    #print Data::Dumper::Dumper($self->{run});
 
     return 0;
+}
+
+sub action_centreonmbietllistener {
+    my ($self, %options) = @_;
+
+    return 0 if (!defined($options{token}) || $options{token} !~ /^$self->{module_id}-$self->{run}->{token}-(.*?)-(.*)$/);
+    my ($type, $indexes) = ($1, $2);
+
+    if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
+        $self->{logger}->writeLogError("[$self->{module_id}] audit node listener - error");
+        #$options{data}->{data}->{message};
+    } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
+        $self->{logger}->writeLogDebug("[$self->{module_id}] audit node listener - ok");
+    } else {
+        return 0;
+    }
+
+    return 1;
 }
 
 sub event {

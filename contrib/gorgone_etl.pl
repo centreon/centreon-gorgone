@@ -170,8 +170,8 @@ sub get_etl_log {
         my $stop = 0;
         foreach (@{$decoded->{data}}) {
             my $data = $self->json_decode(content => $_->{data});
-            if ($_->{code} == 600 && $progress < $data->{complete}) {
-                $self->{logger}->writeLogInfo("etl completed: $data->{complete}\%");
+            if ($_->{code} == 600) {
+                $self->{logger}->writeLogInfo("etl completed: $data->{message}\%");
                 $progress = $data->{complete};
             } elsif ($_->{code} == 1) {
                 $self->{logger}->writeLogError("etl execution: $data->{message}");

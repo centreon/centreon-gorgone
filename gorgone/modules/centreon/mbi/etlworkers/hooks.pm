@@ -31,6 +31,7 @@ use gorgone::modules::centreon::mbi::etlworkers::class;
 use constant NAMESPACE => 'centreon';
 use constant NAME => 'mbi-etlworkers';
 use constant EVENTS => [
+    { event => 'CENTREONMBIETLWORKERSIMPORT' },
     { event => 'CENTREONMBIETLWORKERSREADY' }
 ];
 
@@ -86,18 +87,18 @@ sub routing {
         return undef;
     }
 
-    if (gorgone::class::core::waiting_ready_pool() == 0) {
+    my $pool_id = rr_pool();
+    if (!defined($pool_id)) {
         gorgone::standard::library::add_history(
             dbh => $options{dbh},
             code => GORGONE_ACTION_FINISH_KO,
             token => $options{token},
-            data => { message => NAME . ' - still all ready' },
+            data => { message => NAME . ' - no pool ready' },
             json_encode => 1
         );
-        return ;
+        return undef;
     }
-    
-    my $pool_id = rr_pool();
+
     my $identity = 'gorgone-' . NAME . '-' . $pool_id;
 
     $options{gorgone}->send_internal_message(
@@ -195,14 +196,18 @@ sub broadcast {
 sub rr_pool {
     my (%options) = @_;
 
-    while (1) {
+    my ($loop, $i) = ($config->{pool}, 0);
+    while ($i <= $loop) {
         $rr_current = $rr_current % $config->{pool};
         if ($pools->{$rr_current + 1}->{ready} == 1) {
             $rr_current++;
             return $rr_current;
         }
         $rr_current++;
+        $i++;
     }
+
+    return undef;
 }
 
 sub create_child {

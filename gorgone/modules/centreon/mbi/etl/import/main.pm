@@ -51,7 +51,7 @@ sub createTables {
             my $structure = $monTables->dumpTableStructure($name);
             push @{$etl->{run}->{schedule}->{import}->{actions}},
                 {
-                    run => 0, type => 1, db => 'centstorage',
+                    run => -1, type => 1, db => 'centstorage',
                     sql => [ "[CREATE] add table [$name]", $structure ], actions => []
                 };
         }
@@ -69,14 +69,14 @@ sub createTables {
             $argsBi,
             $etl->{run}->{dbbi}->{centstorage}->{db}
         );
-        $action = { run => 0, type => 2, message => '[LOAD] import table [centreon_acl]', command => $cmd };
+        $action = { run => -1, type => 2, message => '[LOAD] import table [centreon_acl]', command => $cmd };
     }    
 
     if (!$biTables->tableExists('centreon_acl')) {
         my $structure = $monTables->dumpTableStructure('centreon_acl');
         push @{$etl->{run}->{schedule}->{import}->{actions}},
             {
-                run => 0, type => 1, db => 'centstorage',
+                run => -1, type => 1, db => 'centstorage',
                 sql => [ "[CREATE] add table [centreon_acl]", $structure ], actions => defined($action) ? [$action] : []
             };
     } elsif (defined($action)) {
@@ -92,7 +92,7 @@ sub createTables {
             my $structure = $monTables->dumpTableStructure($name);
             push @{$etl->{run}->{schedule}->{import}->{actions}},
                 {
-                    run => 0, type => 1, db => 'centstorage',
+                    run => -1, type => 1, db => 'centstorage',
                     sql => [ "[CREATE] Add table [$name]", $structure ], actions => []
                 };
         }
@@ -104,7 +104,7 @@ sub extractData {
     my ($etl, $options, $notTimedTables) = @_;
 
     foreach my $name (@$notTimedTables) {
-        my $action = { run => 0, type => 1, db => 'centstorage', sql => [], actions => [] };
+        my $action = { run => -1, type => 1, db => 'centstorage', sql => [], actions => [] };
 
         push @{$action->{sql}}, [ '[CREATE] Deleting table [' . $name . ']', 'DROP TABLE IF EXISTS `' . $name . '`' ];
 
@@ -164,7 +164,7 @@ sub extractData {
             $argsBi,
             $etl->{run}->{dbbi}->{centstorage}->{db}
         );
-        push @{$action->{actions}}, { run => 0, type => 2, message => '[LOAD] import table [' . $name . ']', command => $cmd };
+        push @{$action->{actions}}, { run => -1, type => 2, message => '[LOAD] import table [' . $name . ']', command => $cmd };
         push @{$etl->{run}->{schedule}->{import}->{actions}}, $action;
     }
 }
@@ -191,7 +191,7 @@ sub extractCentreonDB {
     );
 
     push @{$etl->{run}->{schedule}->{import}->{actions}}, 
-        { run => 0, type => 2, message => '[LOAD] import table [' . $tables . ']', command => $cmd };
+        { run => -1, type => 2, message => '[LOAD] import table [' . $tables . ']', command => $cmd };
 }
 
 sub dataBin {
@@ -199,7 +199,7 @@ sub dataBin {
 
     return if ($options->{ignore_databin} == 1 || $options->{centreon_only} == 1 || (defined($options->{bam_only}) && $options->{bam_only} == 1));
 
-    my $action = { run => 0, type => 1, db => 'centstorage', sql => [], actions => [] };
+    my $action = { run => -1, type => 1, db => 'centstorage', sql => [], actions => [] };
 
     my $drop = 0;
     if ($options->{rebuild} == 1 && $options->{nopurge} == 0) {
@@ -257,7 +257,7 @@ sub dataBin {
                 $etl->{run}->{dbbi}->{centstorage}->{db}
             );
             $overCond = 'ctime >= ' . $_->{epoch} . ' AND ';
-            push @{$action->{actions}}, { run => 0, type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
+            push @{$action->{actions}}, { run => -1, type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
         }
     }
 

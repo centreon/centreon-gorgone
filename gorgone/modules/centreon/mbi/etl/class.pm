@@ -264,6 +264,14 @@ sub action_centreonmbietlrun {
         $self->{etlProp} = gorgone::modules::centreon::mbi::libs::centreon::ETLProperties->new($self->{logger}, $self->{run}->{dbmon_centreon_con});
         ($self->{run}->{etlProperties}, $self->{run}->{dataRetention}) = $self->{etlProp}->getProperties();
     
+        $self->{run}->{dbmon_centstorage_con} = gorgone::class::db->new(
+            type => 'mysql',
+            force => 2,
+            logger => $self->{logger},
+            die => 1,
+            %{$self->{run}->{dbmon}->{centstorage}}
+        );
+    
         $self->{run}->{dbbi_centstorage_con} = gorgone::class::db->new(
             type => 'mysql',
             force => 2,

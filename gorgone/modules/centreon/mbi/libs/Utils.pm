@@ -82,7 +82,7 @@ sub buildCliMysqlArgs {
 
     my $args = '-u "' . $con->{user} . '" ' .
         '-p"' . $con->{password} . '" ' . 
-        '-h "' $con->{host} . '" ' .
+        '-h "' . $con->{host} . '" ' .
 		'-P ' . $con->{port};
     return $args;
 }

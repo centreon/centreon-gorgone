@@ -1,20 +1,28 @@
-##################################################
-# CENTREON
+# 
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-# Source Copyright 2005 - 2015 CENTREON
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
 #
-# Unauthorized reproduction, copy and distribution
-# are not allowed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# For more informations : contact@centreon.com
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-##################################################
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+package gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 
 use strict;
 use warnings;
 use POSIX;
-
-package gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 
 # Constructor
 # parameters:
@@ -24,38 +32,25 @@ package gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 sub new {
 	my $class = shift;
 	my $self  = {};
-	$self->{"logger"}	= shift;
-	$self->{"centstorage"} = shift;
+
+	$self->{logger}	= shift;
+	$self->{centstorage} = shift;
 	if (@_) {
-		$self->{"centreon"}  = shift;
+		$self->{centreon}  = shift;
 	}
 	bless $self, $class;
 	return $self;
 }
 
-sub isPartitionEnabled {
-	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $parts = 0;
-	my $sth =  $db->query("select count(*) as activated from INFORMATION_SCHEMA.PLUGINS WHERE PLUGIN_NAME = 'partition' and PLUGIN_STATUS='ACTIVE'");
-	if (my $row = $sth->fetchrow_hashref()) {
- 		if ($row->{'activated'} eq "1") {
- 			$parts = 1;
- 		}
- 	}
- 	return $parts;
-	 
-}
-
 sub tableExists {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
+
 	my ($name) = (shift);
-	my $statement = $db->query("SHOW TABLES LIKE '".$name."'");
+	my $statement = $self->{centstorage}->query("SHOW TABLES LIKE '".$name."'");
+
 	if (!(my @row = $statement->fetchrow_array())) {
 		return 0;
-	}else {
+	} else {
 		return 1;
 	}
 }
@@ -78,6 +73,22 @@ sub createTable {
 	return 1;
 }
 
+sub dumpTableStructure {
+	my $self = shift;
+	my ($tableName) = (shift);
+	
+	my $sql = "";
+	my $sth = $self->{centstorage}->query("SHOW CREATE TABLE " . $tableName);
+    if (my $row = $sth->fetchrow_hashref()) {
+	  $sql = $row->{'Create Table'};
+	  $sql =~ s/(CONSTRAINT.*\n)//g;
+      $sql =~ s/(\,\n\s+\))/\)/g;
+    }else {
+    	die "Cannot get structure for table : ".$tableName;
+    }
+    return ($sql);
+}
+
 # create table data_bin with partitions
 sub createParts {
 	my $self = shift;
@@ -96,11 +107,11 @@ sub createParts {
 	$tableStructure .= " PARTITION BY RANGE(`".$column."`) (";
 	my $timeObj = Time->new($logger,$db);
 	my $runningStart = $timeObj->addDateInterval($start, 1, "DAY");
-	 while ($timeObj->compareDates($end, $runningStart) > 0) {
-	 	my @partName = split (/\-/, $runningStart);
-	 	$tableStructure .= "PARTITION p".$partName[0].$partName[1].$partName[2]." VALUES LESS THAN (FLOOR(UNIX_TIMESTAMP('".$runningStart."'))),";
-		$runningStart= $timeObj->addDateInterval($runningStart, 1, "DAY");
-	 }
+    while ($timeObj->compareDates($end, $runningStart) > 0) {
+        my @partName = split (/\-/, $runningStart);
+        $tableStructure .= "PARTITION p" . $partName[0] . $partName[1] . $partName[2] . " VALUES LESS THAN (FLOOR(UNIX_TIMESTAMP('".$runningStart."'))),";
+        $runningStart= $timeObj->addDateInterval($runningStart, 1, "DAY");
+    }
 	my @partName = split (/\-/, $runningStart);
 	$tableStructure .= "PARTITION p".$partName[0].$partName[1].$partName[2]." VALUES LESS THAN (FLOOR(UNIX_TIMESTAMP('".$runningStart."'))));";
 	$logger->writeLog("DEBUG", "[CREATE] table partitionned [".$tableName."] min value: ".$start.", max value: ".$runningStart.", range:  1 DAY\n");
@@ -151,23 +162,24 @@ sub isTablePartitioned {
 
 sub getLastPartRange {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
 	my $tableName = shift;
 	
-	my $query = "SELECT DATE_FORMAT(FROM_UNIXTIME(MAX(CONVERT(PARTITION_DESCRIPTION, SIGNED INTEGER))), '%Y-%m-%d') as lastPart ";
-	$query .= "FROM INFORMATION_SCHEMA.PARTITIONS ";
-	$query .= "WHERE TABLE_NAME='".$tableName."' ";
-	$query .= "AND TABLE_SCHEMA='".$db->db."' ";
-	
-	my $partName = undef;
-	my $sth = $db->query($query);
+	my $query = "SHOW CREATE TABLE $tableName";
+
+	my $partName;
+	my $sth = $self->{centstorage}->query($query);
 	if (my $row = $sth->fetchrow_hashref()) {
-		$partName = $row->{"lastPart"};
-	}else {
-		$logger->writeLog("FATAL", "[UPDATE PARTS] Cannot find table [data_bin] in database");
+        while ($row->{'Create Table'} =~ /PARTITION `(.*?)` VALUES LESS THAN \(([0-9]+?)\)/g) {
+            $partName = $1;
+            $partName =~ s/p(\d{4})(\d{2})(\d{2})/$1-$2-$3/;
+        }
 	}
-	return($partName);
+
+    if (!defined($partName)) {
+        die "[UPDATE PARTS] Cannot find table [data_bin] in database";
+    }
+
+	return $partName;
 }
 
 sub deleteEntriesForRebuild {
@@ -234,7 +246,7 @@ sub dailyPurge {
 	}
 }
 
-sub checkPartitionContinuity{
+sub checkPartitionContinuity {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
 	my $logger = $self->{"logger"};

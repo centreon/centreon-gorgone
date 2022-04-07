@@ -72,6 +72,28 @@ sub db {
     return $self->{db};
 }
 
+sub sameParams {
+    my ($self, %options) = @_;
+
+    my $params = '';
+    if (defined($self->{dsn})) {
+        $params = $self->{dsn};
+    } else {
+       $params = $self->{host} . ':' . $self->{port} . ':' . $self->{db};
+    }
+    $params .= ':' . $self->{user} . ':' . $self->{password};
+
+    my $paramsNew = '';
+    if (defined($options{dsn})) {
+        $paramsNew = $options{dsn};
+    } else {
+       $paramsNew = $options{host} . ':' . $options{port} . ':' . $options{db};
+    }
+    $params .= ':' . $options{user} . ':' . $options{password};
+
+    return ($paramsNew eq $params) ? 1 : 0;
+}
+
 # Getter/Setter DB host
 sub host {
     my $self = shift;
@@ -255,6 +277,8 @@ sub connect() {
             (defined($self->{db}) ? $self->{db} : $self->{dsn}) . "': " . $DBI::errstr . " (caller: $package:$filename:$line) (try: $count)"
         );
         if ($self->{force} == 0 || ($self->{force} == 2 && $count == 1)) {
+            $self->{lastError} = "MySQL error : cannot connect to database '" . 
+                (defined($self->{db}) ? $self->{db} : $self->{dsn}) . "': " . $DBI::errstr;
             $status = -1;
             last;
         }

@@ -51,8 +51,7 @@ sub createTables {
             my $structure = $monTables->dumpTableStructure($name);
             push @{$etl->{run}->{schedule}->{import}->{actions}},
                 {
-                    run => -1, type => 1, db => 'centstorage',
-                    sql => [ "[CREATE] add table [$name]", $structure ], actions => []
+                    type => 1, db => 'centstorage', sql => [ ["[CREATE] add table [$name]", $structure] ], actions => []
                 };
         }
     }
@@ -62,22 +61,21 @@ sub createTables {
     if ($options->{create_tables} == 0) {
         #Update centreon_acl table each time centreon-only is started - not the best way but need for Widgets
         my $cmd = sprintf(
-            "mysqldump --no-create-info --skip-add-drop-table --skip-add-locks --skip-comments %s '%s' %s | mysql %s '%s'",
+            "mysqldump --replace --no-create-info --skip-add-drop-table --skip-add-locks --skip-comments %s '%s' %s | mysql %s '%s'",
             $argsMon,
             $etl->{run}->{dbmon}->{centstorage}->{db},
             'centreon_acl',
             $argsBi,
             $etl->{run}->{dbbi}->{centstorage}->{db}
         );
-        $action = { run => -1, type => 2, message => '[LOAD] import table [centreon_acl]', command => $cmd };
+        $action = { type => 2, message => '[LOAD] import table [centreon_acl]', command => $cmd };
     }    
 
     if (!$biTables->tableExists('centreon_acl')) {
         my $structure = $monTables->dumpTableStructure('centreon_acl');
         push @{$etl->{run}->{schedule}->{import}->{actions}},
             {
-                run => -1, type => 1, db => 'centstorage',
-                sql => [ "[CREATE] add table [centreon_acl]", $structure ], actions => defined($action) ? [$action] : []
+                type => 1, db => 'centstorage', sql => [ ["[CREATE] add table [centreon_acl]", $structure] ], actions => defined($action) ? [$action] : []
             };
     } elsif (defined($action)) {
         push @{$etl->{run}->{schedule}->{import}->{actions}}, $action;
@@ -92,8 +90,7 @@ sub createTables {
             my $structure = $monTables->dumpTableStructure($name);
             push @{$etl->{run}->{schedule}->{import}->{actions}},
                 {
-                    run => -1, type => 1, db => 'centstorage',
-                    sql => [ "[CREATE] Add table [$name]", $structure ], actions => []
+                    type => 1, db => 'centstorage', sql => [ ["[CREATE] Add table [$name]", $structure] ], actions => []
                 };
         }
     }
@@ -104,7 +101,7 @@ sub extractData {
     my ($etl, $options, $notTimedTables) = @_;
 
     foreach my $name (@$notTimedTables) {
-        my $action = { run => -1, type => 1, db => 'centstorage', sql => [], actions => [] };
+        my $action = { type => 1, db => 'centstorage', sql => [], actions => [] };
 
         push @{$action->{sql}}, [ '[CREATE] Deleting table [' . $name . ']', 'DROP TABLE IF EXISTS `' . $name . '`' ];
 
@@ -164,7 +161,7 @@ sub extractData {
             $argsBi,
             $etl->{run}->{dbbi}->{centstorage}->{db}
         );
-        push @{$action->{actions}}, { run => -1, type => 2, message => '[LOAD] import table [' . $name . ']', command => $cmd };
+        push @{$action->{actions}}, { type => 2, message => '[LOAD] import table [' . $name . ']', command => $cmd };
         push @{$etl->{run}->{schedule}->{import}->{actions}}, $action;
     }
 }
@@ -182,16 +179,16 @@ sub extractCentreonDB {
     my $bi = $utils->buildCliMysqlArgs($etl->{run}->{dbbi}->{centreon});
 
     my $cmd = sprintf(
-        "mysqldump --skip-add-drop-table --skip-add-locks --skip-comments %s '%s' %s | mysql %s '%s'",
+        "mysqldump --replace --skip-add-drop-table --skip-add-locks --skip-comments %s '%s' %s | mysql --force %s '%s'",
         $mon,
         $etl->{run}->{dbmon}->{centreon}->{db},
         $tables,
-        $mon,
+        $bi,
         $etl->{run}->{dbbi}->{centreon}->{db}
     );
 
     push @{$etl->{run}->{schedule}->{import}->{actions}}, 
-        { run => -1, type => 2, message => '[LOAD] import table [' . $tables . ']', command => $cmd };
+        { type => 2, message => '[LOAD] import table [' . $tables . ']', command => $cmd };
 }
 
 sub dataBin {
@@ -199,7 +196,7 @@ sub dataBin {
 
     return if ($options->{ignore_databin} == 1 || $options->{centreon_only} == 1 || (defined($options->{bam_only}) && $options->{bam_only} == 1));
 
-    my $action = { run => -1, type => 1, db => 'centstorage', sql => [], actions => [] };
+    my $action = { type => 1, db => 'centstorage', sql => [], actions => [] };
 
     my $drop = 0;
     if ($options->{rebuild} == 1 && $options->{nopurge} == 0) {
@@ -221,13 +218,13 @@ sub dataBin {
         $structure =~ s/\n.*PARTITION.*//g;
         $structure =~ s/\,[\n\s]+\)/\)/;
         $structure .= " PARTITION BY RANGE(`ctime`) (";
-        
+
         my $append = '';
         foreach (@$partitionsPerf) {
             $structure .= $append . "PARTITION p" . $_->{name} . " VALUES LESS THAN (" . $_->{epoch} . ")";
             $append = ',';
         }
-        $structure .= ';';
+        $structure .= ');';
 
         push @{$action->{sql}},
             [ '[CREATE] Add table [data_bin]', $structure ],
@@ -246,9 +243,11 @@ sub dataBin {
 
     if ($etl->{run}->{options}->{create_tables} == 0 && ($etlProperties->{'statistics.type'} eq 'all' || $etlProperties->{'statistics.type'} eq 'perfdata')) {
         my $overCond = '';
+        my $replace = '--replace';
+        $replace = '' if ($drop == 1);
         foreach (@$partitionsPerf) {
             my $cmd = sprintf(
-                "mysqldump --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql %s '%s'",
+                "mysqldump $replace --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql %s '%s'",
                 $argsMon,
                 $etl->{run}->{dbmon}->{centstorage}->{db},
                 'data_bin',
@@ -257,7 +256,7 @@ sub dataBin {
                 $etl->{run}->{dbbi}->{centstorage}->{db}
             );
             $overCond = 'ctime >= ' . $_->{epoch} . ' AND ';
-            push @{$action->{actions}}, { run => -1, type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
+            push @{$action->{actions}}, { type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
         }
     }
 
@@ -275,8 +274,6 @@ sub selectTables {
     my @timeId = ('time_id', 'time_id');
     my $importComment = $etlProperties->{'import.comments'};
 	my $importDowntimes = $etlProperties->{'import.downtimes'};
-
-    push @notTimedTables, 'centreon_acl';
 
     if (!defined($etlProperties->{'statistics.type'})) {
         die 'cannot determine statistics type or compatibility mode for data integration';
@@ -333,7 +330,6 @@ sub selectTables {
             push @notTimedTables, "mod_bam_reporting_relations_ba_kpi_events";
 			push @notTimedTables, "mod_bam_reporting_timeperiods";
         }
-
     }
 
     return (\@notTimedTables, \%timedTables);

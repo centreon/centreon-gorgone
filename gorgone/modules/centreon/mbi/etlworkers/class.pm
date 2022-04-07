@@ -26,12 +26,12 @@ use strict;
 use warnings;
 use gorgone::standard::library;
 use gorgone::standard::constants qw(:all);
-use gorgone::class::sqlquery;
 use gorgone::class::http::http;
 use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use JSON::XS;
 use Try::Tiny;
+use gorgone::modules::centreon::mbi::etlworkers::import::main;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -79,24 +79,59 @@ sub class_handle_HUP {
     }
 }
 
+sub db_connections {
+    my ($self, %options) = @_;
+
+    if (!defined($self->{dbmon_centstorage_con}) || $self->{dbmon_centstorage_con}->sameParams(%{$options{dbmon}->{centstorage}}) == 0) {
+        $self->{dbmon_centstorage_con} = gorgone::class::db->new(
+            type => 'mysql',
+            force => 2,
+            logger => $self->{logger},
+            die => 1,
+            %{$options{dbmon}->{centstorage}}
+        );
+    }
+    if (!defined($self->{dbbi_centstorage_con}) || $self->{dbmon_centstorage_con}->sameParams(%{$options{dbbi}->{centstorage}}) == 0) {
+       $self->{dbbi_centstorage_con} = gorgone::class::db->new(
+            type => 'mysql',
+            force => 2,
+            logger => $self->{logger},
+            die => 1,
+            %{$options{dbbi}->{centstorage}}
+        );
+    }
+}
+
 sub action_centreonmbietlworkersimport {
     my ($self, %options) = @_;
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
+    $self->{messages} = [];
+    my $code = GORGONE_ACTION_FINISH_OK;
+
     try {
-        #$options{data}->{content}->{params}
-        #$options{data}->{content}->{dbmon}
-        #$options{data}->{content}->{dbbi}
-    } catch {
-        $self->send_log(
-            code => GORGONE_ACTION_FINISH_KO,
-            token => $options{token},
-            data => {
-                message => $_
-            }
+        $self->db_connections(
+            dbmon => $options{data}->{content}->{dbmon},
+            dbbi => $options{data}->{content}->{dbbi}
         );
+        if ($options{data}->{content}->{params}->{type} == 1) {
+            gorgone::modules::centreon::mbi::etlworkers::import::main::sql($self, params => $options{data}->{content}->{params});
+        } elsif ($options{data}->{content}->{params}->{type} == 2) {
+            gorgone::modules::centreon::mbi::etlworkers::import::main::command($self, params => $options{data}->{content}->{params});
+        }
+    } catch {
+        push @{$self->{messages}}, ['E', $_];
+        $code = GORGONE_ACTION_FINISH_KO;
     };
+
+    $self->send_log(
+        code => $code,
+        token => $options{token},
+        data => {
+            messages => $self->{messages}
+        }
+    );
 }
 
 sub event {

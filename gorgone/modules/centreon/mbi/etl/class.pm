@@ -36,6 +36,18 @@ use gorgone::modules::centreon::mbi::etl::import::main;
 use gorgone::modules::centreon::mbi::libs::centreon::ETLProperties;
 use Try::Tiny;
 
+use constant NONE => 0;
+use constant RUNNING => 1;
+use constant STOP => 2;
+
+use constant NOTDONE => 0;
+use constant DONE => 1;
+
+use constant UNPLANNED => -1;
+use constant PLANNED => 0;
+#use constant RUNNING => 1;
+use constant FINISHED => 2;
+
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
 
@@ -49,10 +61,7 @@ sub new {
     $connector->{reports_profile} = (defined($connector->{config}->{reports_profile}) && $connector->{config}->{reports_profile} ne '') ?
         $connector->{config}->{reports_profile} : '/etc/centreon-bi/reports-profile.xml';
 
-    $connector->{run} = {
-        running => 0,
-        token => ''
-    };
+    $connector->{run} = { status => NONE };
 
     $connector->set_signal_handlers();
     return $connector;
@@ -90,6 +99,12 @@ sub class_handle_HUP {
     }
 }
 
+sub reset {
+    my ($self, %options) = @_;
+
+    $self->{run} = { status => NONE };
+}
+
 sub runko {
     my ($self, %options) = @_;
 
@@ -97,10 +112,11 @@ sub runko {
         code => GORGONE_ACTION_FINISH_KO,
         token => defined($options{token}) ? $options{token} : $self->{run}->{token},
         data => {
-            message => $options{msg}
+            messages => [ ['E', $options{msg} ] ]
         }
     );
-    $self->{run}->{running} = 0;
+
+    $self->check_stopped();
     return 1;
 }
 
@@ -180,44 +196,33 @@ sub execute_action {
     );
 }
 
-sub planning {
-    my ($self, %options) = @_;
-
-    if ($self->{run}->{options}->{import} == 1) {
-        $self->{run}->{schedule}->{import}->{running} = 0;
-        $self->{run}->{schedule}->{steps}++;
-    }
-    if ($self->{run}->{options}->{dimensions} == 1) {
-        $self->{run}->{schedule}->{dimensions}->{running} = 0;
-        $self->{run}->{schedule}->{steps}++;
-    }
-    if ($self->{run}->{options}->{event} == 1) {
-        $self->{run}->{schedule}->{event}->{running} = 0;
-        $self->{run}->{schedule}->{steps}++;
-    }
-    if ($self->{run}->{options}->{perfdata} == 1) {
-        $self->{run}->{schedule}->{perfdata}->{running} = 0;
-        $self->{run}->{schedule}->{steps}++;
-    }
-
-    $self->{run}->{schedule}->{steps_done} = 0;
-    $self->{run}->{schedule}->{planned} = 1;
-}
-
 sub watch_etl_import {
     my ($self, %options) = @_;
 
-    if ($self->{run}->{schedule}->{import}->{substeps_done} >= $self->{run}->{schedule}->{import}->{substeps}) {
-        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { message => '[SCHEDULER][IMPORT] finished' });
-        $self->{run}->{schedule}->{import}->{running} = 1;
+    if (defined($options{indexes})) {
+        $self->{run}->{schedule}->{import}->{substeps_executed}++;
+        my ($idx, $idx2) = split(/-/, $options{indexes});
+        if (defined($idx) && defined($idx2)) {
+            $self->{run}->{schedule}->{import}->{actions}->[$idx]->{actions}->[$idx2]->{status} = FINISHED;
+        } else {
+            $self->{run}->{schedule}->{import}->{actions}->[$idx]->{status} = FINISHED;
+        }
+    }
+
+    return if (!$self->check_stopped());
+
+    if ($self->{run}->{schedule}->{import}->{substeps_executed} >= $self->{run}->{schedule}->{import}->{substeps_total}) {
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][IMPORT] finished'] ] });
+        $self->{run}->{schedule}->{import}->{status} = FINISHED;
         $self->run_etl();
         return ;
     }
 
     while (my ($idx, $val) = each(@{$self->{run}->{schedule}->{import}->{actions}})) {
-        if ($val->{run} == -1) {
+        if (!defined($val->{status})) {
             $self->{logger}->writeLogDebug("[mbi-etl] execute substep import-$idx");
-            $self->{run}->{schedule}->{import}->{actions}->[$idx]->{run} = 0;
+            $self->{run}->{schedule}->{import}->{substeps_execute}++;
+            $self->{run}->{schedule}->{import}->{actions}->[$idx]->{status} = RUNNING;
             $self->execute_action(
                 action => 'CENTREONMBIETLWORKERSIMPORT',
                 substep => "import-$idx",
@@ -225,15 +230,17 @@ sub watch_etl_import {
                     type => $val->{type}, 
                     db => $val->{db},
                     sql => $val->{sql},
-                    command => $val->{command}
+                    command => $val->{command},
+                    message => $val->{message}
                 }
             );
-        } elsif ($val->{run} == 1) {
+        } elsif ($val->{status} == FINISHED) {
             while (my ($idx2, $val2) = each(@{$val->{actions}})) {
-                next if ($val->{run} >= 0);
+                next if (defined($val2->{status}));
 
                 $self->{logger}->writeLogDebug("[mbi-etl] execute substep import-$idx-$idx2");
-                $self->{run}->{schedule}->{import}->{actions}->[$idx]->{actions}->[$idx2]->{run} = 0;
+                $self->{run}->{schedule}->{import}->{substeps_execute}++;
+                $self->{run}->{schedule}->{import}->{actions}->[$idx]->{actions}->[$idx2]->{status} = RUNNING;
                 $self->execute_action(
                     action => 'CENTREONMBIETLWORKERSIMPORT',
                     substep => "import-$idx-$idx2",
@@ -253,39 +260,132 @@ sub run_etl_import {
         die 'Do not execute this script if the reporting engine is installed on the monitoring server. In case of "all in one" installation, do not consider this message';
     }
 
-    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { message => '[SCHEDULER][IMPORT] Prepare' });
+    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][IMPORT] Prepare' ] ] });
 
     gorgone::modules::centreon::mbi::etl::import::main::prepare($self);
 
-    $self->{run}->{schedule}->{import}->{substeps_done} = 0;
-    $self->{run}->{schedule}->{import}->{substeps} = 0;
+    $self->{run}->{schedule}->{import}->{status} = RUNNING;
+
+    $self->{run}->{schedule}->{import}->{substeps_execute} = 0;
+    $self->{run}->{schedule}->{import}->{substeps_executed} = 0;
+    $self->{run}->{schedule}->{import}->{substeps_total} = 0;
     foreach (@{$self->{run}->{schedule}->{import}->{actions}}) {
-        $self->{run}->{schedule}->{import}->{substeps}++;
+        $self->{run}->{schedule}->{import}->{substeps_total}++;
         my $num = defined($_->{actions}) ? scalar(@{$_->{actions}}) : 0;
-        $self->{run}->{schedule}->{import}->{substeps} += $num if ($num > 0);
+        $self->{run}->{schedule}->{import}->{substeps_total} += $num if ($num > 0);
     }
 
-    $self->{logger}->writeLogDebug("[mbi-etl] import substeps = " . $self->{run}->{schedule}->{import}->{substeps});
+    $self->{logger}->writeLogDebug("[mbi-etl] import substeps " . $self->{run}->{schedule}->{import}->{substeps_total});
 
     $self->watch_etl_import();
+}
+
+sub run_etl_dimensions {
+    my ($self, %options) = @_;
+
+    
 }
 
 sub run_etl {
     my ($self, %options) = @_;
 
-    if ($self->{run}->{schedule}->{import}->{running} == 0) {
+    if ($self->{run}->{schedule}->{import}->{status} == PLANNED) {
         $self->run_etl_import();
         return ;
-    } elsif ($self->{run}->{schedule}->{dimensions}->{running} == 0) {
+    } elsif ($self->{run}->{schedule}->{dimensions}->{status} == PLANNED) {
         $self->run_etl_dimensions();
         return ;
     }
-    if ($self->{run}->{schedule}->{event}->{running} == 0) {
+    if ($self->{run}->{schedule}->{event}->{status} == PLANNED) {
         $self->run_etl_event();
     }
-    if ($self->{run}->{schedule}->{perfdata}->{running} == 0) {
+    if ($self->{run}->{schedule}->{perfdata}->{status} == PLANNED) {
         $self->run_etl_perfdata();
     }
+}
+
+sub check_stopped_import {
+    my ($self, %options) = @_;
+
+    return 0 if ($self->{run}->{schedule}->{import}->{substeps_executed} >= $self->{run}->{schedule}->{import}->{substeps_execute});
+
+    return 1;
+}
+
+sub check_stopped_dimensions {
+    my ($self, %options) = @_;
+
+    return 0;
+}
+
+sub check_stopped_event {
+    my ($self, %options) = @_;
+
+    return 0;
+}
+
+sub check_stopped_perfdata {
+    my ($self, %options) = @_;
+
+    return 0;
+}
+
+sub check_stopped {
+    my ($self, %options) = @_;
+
+    # if nothing planned. so we stop
+    if ($self->{run}->{schedule}->{planned} == NOTDONE) {
+        $self->reset();
+        return 0;
+    }
+
+    # still no errors. continue
+    return 1 if ($self->{run}->{status} != STOP);
+
+    my $stopped = 0;
+    $stopped += $self->check_stopped_import()
+        if ($self->{run}->{schedule}->{import}->{status} == RUNNING);
+    $stopped += $self->check_stopped_dimensions()
+        if ($self->{run}->{schedule}->{dimensions}->{status} == RUNNING);
+    $stopped += $self->check_stopped_event()
+        if ($self->{run}->{schedule}->{event}->{status} == RUNNING);
+    $stopped += $self->check_stopped_perfdata()
+        if ($self->{run}->{schedule}->{perfdata}->{status} == RUNNING);
+
+    if ($stopped == 0) {
+        $self->reset();
+        return 0;
+    }
+
+    return 1;
+}
+
+sub planning {
+    my ($self, %options) = @_;
+
+    if ($self->{run}->{options}->{import} == 1) {
+        $self->{run}->{schedule}->{import}->{status} = PLANNED;
+        $self->{run}->{schedule}->{steps_total}++;
+    }
+    if ($self->{run}->{options}->{dimensions} == 1) {
+        $self->{run}->{schedule}->{dimensions}->{status} = PLANNED;
+        $self->{run}->{schedule}->{steps_total}++;
+    }
+    if ($self->{run}->{options}->{event} == 1) {
+        $self->{run}->{schedule}->{event}->{status} = PLANNED;
+        $self->{run}->{schedule}->{steps_total}++;
+    }
+    if ($self->{run}->{options}->{perfdata} == 1) {
+        $self->{run}->{schedule}->{perfdata}->{status} = PLANNED;
+        $self->{run}->{schedule}->{steps_total}++;
+    }
+
+    if ($self->{run}->{schedule}->{steps_total} == 0) {
+        die "[SCHEDULING] nothing planned";
+    }
+
+    $self->{run}->{schedule}->{steps_executed} = 0;
+    $self->{run}->{schedule}->{planned} = DONE;
 }
 
 sub check_basic_options {
@@ -312,26 +412,27 @@ sub action_centreonmbietlrun {
     try {
         $options{token} = $self->generate_token() if (!defined($options{token}));
 
-        return $self->runko(token => $options{token}, msg => '[SCHEDULER] already running') if ($self->{run}->{running} == 1);
+        return $self->runko(token => $options{token}, msg => '[SCHEDULER] already running') if ($self->{run}->{status} == RUNNING);
+        return $self->runko(token => $options{token}, msg => '[SCHEDULER] currently wait previous execution finished - can restart gorgone mbi process') if ($self->{run}->{status} == STOP);
 
         $self->{run}->{token} = $options{token};
 
         $self->check_basic_options(%{$options{data}->{content}});
 
         $self->{run}->{schedule} = {
-            steps_done => 0,
-            steps => 0,
-            planned => 0,
-            import => { running => -1, count => 0, actions => [], tokens => {} },
-            dimensions => { running => -1, token => '' },
-            event => { running => -1, actions => [] },
-            perfdata => { running => -1, actions => [] }
+            steps_total => 0,
+            steps_executed => 0,
+            planned => NOTDONE,
+            import => { status => UNPLANNED, actions => [] },
+            dimensions => { status => UNPLANNED, token => '' },
+            event => { status => UNPLANNED, actions => [] },
+            perfdata => { status => UNPLANNED, actions => [] }
         };
-        $self->{run}->{running} = 1;
+        $self->{run}->{status} = RUNNING;
     
         $self->{run}->{options} = $options{data}->{content};
 
-        $self->send_log(code => GORGONE_ACTION_BEGIN, token => $self->{run}->{token}, data => { message => 'action etl run started' });
+        $self->send_log(code => GORGONE_ACTION_BEGIN, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER] start' ] ] });
 
         $self->{run}->{dbmon} = $self->db_parse_xml(file => $self->{cbis_profile}); 
         $self->{run}->{dbbi} = $self->db_parse_xml(file => $self->{reports_profile}); 
@@ -380,12 +481,22 @@ sub action_centreonmbietllistener {
     my ($type, $indexes) = ($1, $2);
 
     if ($options{data}->{code} == GORGONE_ACTION_FINISH_KO) {
-        $self->{logger}->writeLogError("[$self->{module_id}] audit node listener - error");
-        #$options{data}->{data}->{message};
+        $self->{run}->{status} = STOP;
+        $self->send_log(code => GORGONE_ACTION_FINISH_KO, token => $self->{run}->{token}, data => $options{data}->{data});
     } elsif ($options{data}->{code} == GORGONE_ACTION_FINISH_OK) {
-        $self->{logger}->writeLogDebug("[$self->{module_id}] audit node listener - ok");
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => $options{data}->{data});
     } else {
         return 0;
+    }
+
+    if ($type eq 'import') {
+        $self->watch_etl_import(indexes => $indexes);
+    } elsif ($type eq 'dimensions') {
+        
+    } elsif ($type eq 'event') {
+        
+    } elsif ($type eq 'perfdata') {
+        
     }
 
     return 1;

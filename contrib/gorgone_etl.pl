@@ -115,10 +115,6 @@ sub run_etl {
         critical_status => ''
     );
 
-    if ($code) {
-        $self->{logger}->writeLogError("http request error");
-        exit(1);
-    }
     if ($self->{http}->get_code() < 200 || $self->{http}->get_code() >= 300) {
         $self->{logger}->writeLogError("Login error [code: '" . $self->{http}->get_code() . "'] [message: '" . $self->{http}->get_message() . "']");
         exit(1);
@@ -133,16 +129,39 @@ sub run_etl {
     $self->{token} = $decoded->{token};
 }
 
+sub display_messages {
+    my ($self, %options) = @_;
+
+    if (defined($options{data}->{messages})) {
+        foreach (@{$options{data}->{messages}}) {
+            if ($_->[0] eq 'D') {
+                $self->{logger}->writeLogDebug($_->[1])
+            } elsif ($_->[0] eq 'I') {
+                $self->{logger}->writeLogInfo($_->[1]);
+            } elsif ($_->[0] eq 'E') {
+                $self->{logger}->writeLogError($_->[1]);
+            }
+        }
+    }
+}
+
 sub get_etl_log {
     my ($self) = @_;
-    
+
+    my $ctime;
     my $progress = 0;
     while (1) {
+        my $get_param = [];
+        if (defined($ctime)) {
+            $get_param = ['ctime=' . $ctime];
+        }
+
         my ($code, $content) = $self->{http}->request(
             http_backend => 'curl',
             method => 'GET',
             hostname => '',
             full_url => $self->{url} . '/api/log/' . $self->{token},
+            get_param => $get_param,
             header => [
                 'Accept-Type: application/json; charset=utf-8'
             ],
@@ -152,14 +171,12 @@ sub get_etl_log {
             critical_status => ''
         );
 
-        if ($code) {
-            $self->{logger}->writeLogError("Login error [code: '" . $self->{http}->get_code() . "'] [message: '" . $self->{http}->get_message() . "']");
-            exit(1);
-        }
         if ($self->{http}->get_code() < 200 || $self->{http}->get_code() >= 300) {
             $self->{logger}->writeLogError("Login error [code: '" . $self->{http}->get_code() . "'] [message: '" . $self->{http}->get_message() . "']");
             exit(1);
         }
+
+        $ctime = time();
 
         my $decoded = $self->json_decode(content => $content);
         if (!defined($decoded->{data})) {
@@ -171,19 +188,18 @@ sub get_etl_log {
         foreach (@{$decoded->{data}}) {
             my $data = $self->json_decode(content => $_->{data});
             if ($_->{code} == 600) {
-                $self->{logger}->writeLogInfo("etl completed: $data->{message}\%");
-                $progress = $data->{complete};
+                $self->display_messages(data => $data);
             } elsif ($_->{code} == 1) {
-                $self->{logger}->writeLogError("etl execution: $data->{message}");
+                $self->display_messages(data => $data);                
                 $stop = 1;
             } elsif ($_->{code} == 2) {
-                print "==la==\n";
+                $self->display_messages(data => $data);
                 $stop = 1;
             }
         }
 
         last if ($stop == 1);
-        sleep(10);
+        sleep(2);
     }
 }
 

@@ -45,6 +45,7 @@ ls -lart
 tar czpf centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
 mv centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
 cd src/centreon-gorgone/
+ls -lart
 cp -rf ci/debian .
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -u "$VERSION" -b ":perl" -y -r "$RELEASE"
 debuild-pbuilder

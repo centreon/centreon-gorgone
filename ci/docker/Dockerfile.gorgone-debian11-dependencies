@@ -10,6 +10,9 @@ dh-make \
 dh-make-perl \
 libtest-simple-perl \
 libmodule-install-perl \
+libnet-ldap-perl \
+libauthen-simple-passwd-perl \
+libmojolicious-perl \
 aptitude \
 lintian \
 pbuilder \

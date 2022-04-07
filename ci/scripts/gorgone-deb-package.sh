@@ -10,7 +10,7 @@ echo "################################################## PACKAGING COLLECT #####
 
 AUTHOR="Luiz Costa"
 AUTHOR_EMAIL="me@luizgustavo.pro.br"
-
+REVISION=bullseye
 if [ -d ./tmp ] ; then
   rm -rf ./tmp
 fi

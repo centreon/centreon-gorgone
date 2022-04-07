@@ -41,11 +41,11 @@ cd ../../
 if [ -d centreon-gorgone/build ] ; then
     rm -rf centreon-gorgone/build
 fi
-mkdir centreon-gorgone
+
 tar czpf centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
-cp centreon-gorgone-$VERSION.tar.gz centreon-gorgone
+cp centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
 cd src/centreon-gorgone/
-cp -rf ci/debian centreon-gorgone
+cp -rf ci/debian .
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -u "$VERSION" -b ":perl" -y -r "$RELEASE"
 debuild-pbuilder
 cd ../

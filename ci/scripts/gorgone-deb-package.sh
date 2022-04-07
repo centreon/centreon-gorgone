@@ -35,8 +35,7 @@ rm -rf debian/changelog
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -b ":perl" -r $RELEASE -y
 debuild-pbuilder -uc -us
 cd ..
-ls -lart
-dpkg -i zmq-libzmq4-perl_0.02-${REVISION}_all.deb
+dpkg -i zmq-libzmq4-perl_0.02-${RELEASE}_all.deb
 cd ../../
 
 if [ -d centreon-gorgone/build ] ; then
@@ -57,3 +56,4 @@ mv tmp/libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb $DISTR
 mv tmp/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
 mv tmp/libzmq-constants-perl_1.04-${RELEASE}_all.deb $DISTRIB/
 mv *.deb $DISTRIB/
+mv $DISTRIB/*.deb /src

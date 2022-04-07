@@ -96,7 +96,7 @@ try {
     }
 
     'Debian bullseye packaging and signing': {
-      node("perl") {
+      node {
         dir('centreon-gorgone') {
           checkout scm
         }

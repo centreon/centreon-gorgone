@@ -43,7 +43,7 @@ if [ -d centreon-gorgone/build ] ; then
 fi
 ls -lart
 tar czpf centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
-mv centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
+cp centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
 cd src/centreon-gorgone/
 ls -lart
 cp -rf ci/debian .

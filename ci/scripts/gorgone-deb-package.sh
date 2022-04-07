@@ -35,6 +35,7 @@ rm -rf debian/changelog
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -b ":perl" -r $RELEASE -y
 debuild-pbuilder -uc -us
 cd ..
+ls -lart
 dpkg -i zmq-libzmq4-perl_0.02-${REVISION}_all.deb
 cd ../../
 

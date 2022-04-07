@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -ex
 
 if [ -z "$VERSION" -o -z "$RELEASE" -o -z "$DISTRIB" ] ; then
   echo "You need to specify VERSION / RELEASE / DISTRIB variables"

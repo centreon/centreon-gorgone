@@ -41,6 +41,7 @@ cd ../../
 if [ -d centreon-gorgone/build ] ; then
     rm -rf centreon-gorgone/build
 fi
+ls -lart
 tar czpf centreon-gorgone-$VERSION.tar.gz centreon-gorgone
 cd centreon-gorgone/
 cp -rf ci/debian .

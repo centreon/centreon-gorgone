@@ -11,6 +11,8 @@ echo "################################################## PACKAGING COLLECT #####
 AUTHOR="Luiz Costa"
 AUTHOR_EMAIL="me@luizgustavo.pro.br"
 
+pwd
+
 if [ -d ./tmp ] ; then
   rm -rf ./tmp
 fi
@@ -37,18 +39,19 @@ debuild-pbuilder -uc -us
 cd ..
 dpkg -i zmq-libzmq4-perl_0.02-${RELEASE}_all.deb
 cd ../../
+pwd
 
-if [ -d centreon-gorgone/build ] ; then
-    rm -rf centreon-gorgone/build
+if [ -d build ]; then
+  rm -rf build
 fi
+mkdir -p build/centreon-gorgone
+cd build
+(cd /src && tar czvpf - centreon-gorgone) | dd of=centreon-gorgone-$VERSION.tar.gz
+cp -rvf /src/centreon-gorgone build/
+cp -rvf /src/centreon-gorgone/ci/debian build/centreon-gorgone/
 
-mkdir centreon-gorgone
+ls -lart
 cd centreon-gorgone
-
-tar czpvf centreon-gorgone-$VERSION.tar.gz ../src/centreon-gorgone
-ls -lart
-cp -rf src/centreon-gorgone/ci/debian .
-ls -lart
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -u "$VERSION" -b ":perl" -y -r "$RELEASE"
 debuild-pbuilder
 cd ../

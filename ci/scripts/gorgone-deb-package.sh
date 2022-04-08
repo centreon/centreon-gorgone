@@ -10,7 +10,7 @@ echo "################################################## PACKAGING COLLECT #####
 
 AUTHOR="Luiz Costa"
 AUTHOR_EMAIL="me@luizgustavo.pro.br"
-REVISION=bullseye
+
 if [ -d ./tmp ] ; then
   rm -rf ./tmp
 fi
@@ -42,10 +42,13 @@ if [ -d centreon-gorgone/build ] ; then
     rm -rf centreon-gorgone/build
 fi
 
-tar czpf centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
-cp centreon-gorgone-$VERSION.tar.gz src/centreon-gorgone
-cd src/centreon-gorgone/
-cp -rf ci/debian .
+mkdir centreon-gorgone
+cd centreon-gorgone
+
+tar czpvf centreon-gorgone-$VERSION.tar.gz ../src/centreon-gorgone
+ls -lart
+cp -rf src/centreon-gorgone/ci/debian .
+ls -lart
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -u "$VERSION" -b ":perl" -y -r "$RELEASE"
 debuild-pbuilder
 cd ../

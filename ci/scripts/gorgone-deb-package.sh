@@ -13,12 +13,13 @@ AUTHOR_EMAIL="me@luizgustavo.pro.br"
 
 pwd
 
-if [ -d ./tmp ] ; then
-  rm -rf ./tmp
+if [ -d /build ]; then
+  rm -rf /build
 fi
+mkdir -p /build
 
-mkdir -p ./tmp
-cd ./tmp
+mkdir -p /build/tmp
+cd /build/tmp
 apt-cache dumpavail | dpkg --merge-avail
 
 yes | dh-make-perl make --build --version "0.11.3-${RELEASE}" --cpan Mojolicious::Plugin::BasicAuthPlus
@@ -38,30 +39,26 @@ debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -b ":perl" -r $RELEASE -y
 debuild-pbuilder -uc -us
 cd ..
 dpkg -i zmq-libzmq4-perl_0.02-${RELEASE}_all.deb
-cd ../../
-pwd
+cd /build
 
-if [ -d build ]; then
-  rm -rf build
-fi
-mkdir -p build/centreon-gorgone
-cd build
+mkdir -p /build/centreon-gorgone
 (cd /src && tar czvpf - centreon-gorgone) | dd of=centreon-gorgone-$VERSION.tar.gz
-cp -rvf /src/centreon-gorgone build/
-cp -rvf /src/centreon-gorgone/ci/debian build/centreon-gorgone/
+cp -rv /src/centreon-gorgone /build/
+cp -rv /src/centreon-gorgone/ci/debian /build/centreon-gorgone/
 
+pwd
 ls -lart
 cd centreon-gorgone
 debmake -f "${AUTHOR}" -e "${AUTHOR_EMAIL}" -u "$VERSION" -b ":perl" -y -r "$RELEASE"
 debuild-pbuilder
-cd ../
+cd /build
 
 if [ -d "$DISTRIB" ] ; then
   rm -rf "$DISTRIB"
 fi
 mkdir $DISTRIB
-mv tmp/libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb $DISTRIB/
-mv tmp/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
-mv tmp/libzmq-constants-perl_1.04-${RELEASE}_all.deb $DISTRIB/
-mv *.deb $DISTRIB/
-mv $DISTRIB/*.deb /src
+mv /build/tmp/libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb $DISTRIB/
+mv /build/tmp/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
+mv /build/tmp/libzmq-constants-perl_1.04-${RELEASE}_all.deb $DISTRIB/
+mv /build/*.deb $DISTRIB/
+mv /build/$DISTRIB/*.deb /src

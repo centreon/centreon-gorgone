@@ -179,7 +179,7 @@ sub action_centreonmbietlworkersdimensions {
         );
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;
-        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
+        $self->{messages}->writeLog('ERROR', $_, 1);
     };
 
     $self->send_log(

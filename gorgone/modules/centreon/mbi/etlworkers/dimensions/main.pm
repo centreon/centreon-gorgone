@@ -18,10 +18,11 @@
 # limitations under the License.
 #
 
+package gorgone::modules::centreon::mbi::etlworkers::dimensions::main;
+
 use strict;
 use warnings;
 
-use Data::Dumper;
 use IO::Socket::INET;
 
 use gorgone::modules::centreon::mbi::libs::centreon::Host;
@@ -63,7 +64,7 @@ sub initVars {
     $time = gorgone::modules::centreon::mbi::libs::bi::Time->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
     $liveService = gorgone::modules::centreon::mbi::libs::bi::LiveService->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
     $biMetric = gorgone::modules::centreon::mbi::libs::bi::BIMetric->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-    $biDataQuality = gorgone::modules::centreon::mbi::libs::bi::DataQuality->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+    $biDataQuality = gorgone::modules::centreon::mbi::libs::bi::DataQuality->new($etlwk->{messages}, $etlwk->{dbbi_centreon_con});
 }
 
 # temporary method to list liveservices for job configuration in Centreon

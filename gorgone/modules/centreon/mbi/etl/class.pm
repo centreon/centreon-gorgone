@@ -182,17 +182,55 @@ sub execute_action {
             }
         ]
     );
+
+    my $content =  {
+        dbmon => $self->{run}->{dbmon},
+        dbbi => $self->{run}->{dbbi},
+        params => $options{params}
+    };
+    if (defined($options{etlProperties})) {
+        $content->{etlProperties} = $self->{run}->{etlProperties};
+    }
+    if (defined($options{dataRetention})) {
+        $content->{dataRetention} = $self->{run}->{dataRetention};
+    }
+    if (defined($options{options})) {
+        $content->{options} = $self->{run}->{options};
+    }
+
     $self->send_internal_action(
-        action => 'CENTREONMBIETLWORKERSIMPORT',
+        action => $options{action},
         token => $self->{module_id} . '-' . $self->{run}->{token} . '-' . $options{substep},
         data => {
             instant => 1,
-            content => {
-                dbmon => $self->{run}->{dbmon},
-                dbbi => $self->{run}->{dbbi},
-                params => $options{params}
-            }
+            content => $content
         }
+    );
+}
+
+sub watch_etl_dimensions {
+    my ($self, %options) = @_;
+
+    if (defined($options{indexes})) {
+        $self->{run}->{schedule}->{dimensions}->{substeps_executed}++;
+    }
+
+    return if (!$self->check_stopped());
+
+    if ($self->{run}->{schedule}->{dimensions}->{substeps_executed} >= $self->{run}->{schedule}->{dimensions}->{substeps_total}) {
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][DIMENSIONS] finished'] ] });
+        $self->{run}->{schedule}->{dimensions}->{status} = FINISHED;
+        $self->run_etl();
+        return ;
+    }
+
+    $self->{run}->{schedule}->{dimensions}->{substeps_execute}++;
+    $self->execute_action(
+        action => 'CENTREONMBIETLWORKERSDIMENSIONS',
+        substep => 'dimensions-1',
+        etlProperties => 1,
+        options => 1,
+        params => {}
     );
 }
 
@@ -283,6 +321,21 @@ sub run_etl_import {
 sub run_etl_dimensions {
     my ($self, %options) = @_;
 
+    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][DIMENSIONS] Prepare' ] ] });
+    $self->{run}->{schedule}->{dimensions}->{status} = RUNNING;
+    $self->{run}->{schedule}->{dimensions}->{substeps_execute} = 0;
+    $self->{run}->{schedule}->{dimensions}->{substeps_executed} = 0;
+    $self->{run}->{schedule}->{dimensions}->{substeps_total} = 1;
+    $self->watch_etl_dimensions();
+}
+
+sub run_etl_event {
+    my ($self, %options) = @_;
+    
+}
+
+sub run_etl_perfdata {
+    my ($self, %options) = @_;
     
 }
 
@@ -315,7 +368,9 @@ sub check_stopped_import {
 sub check_stopped_dimensions {
     my ($self, %options) = @_;
 
-    return 0;
+    return 0 if ($self->{run}->{schedule}->{dimensions}->{substeps_executed} >= $self->{run}->{schedule}->{dimensions}->{substeps_execute});
+
+    return 1;
 }
 
 sub check_stopped_event {
@@ -492,7 +547,7 @@ sub action_centreonmbietllistener {
     if ($type eq 'import') {
         $self->watch_etl_import(indexes => $indexes);
     } elsif ($type eq 'dimensions') {
-        
+        $self->watch_etl_dimensions(indexes => $indexes);
     } elsif ($type eq 'event') {
         
     } elsif ($type eq 'perfdata') {

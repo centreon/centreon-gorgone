@@ -336,23 +336,6 @@ Query: $query
 }
 
 sub prepare {
-	my $self = shift;
-	my $query = shift;
-	
-	my $instance = $self->{"instance"};
-	my $logger = $self->{"logger"};
-	
-	$logger->writeLog("DEBUG", "MySQL query : ".$query);
-	my $statement_handle = $instance->prepare($query);
-	if (defined($instance->errstr)) {
-	  	$logger->writeLog("INFO", "MySQL query : ".$query);
-	  	$logger->writeLog("FATAL", "MySQL error : ".$instance->errstr);
-	}
-
-    return $statement_handle;
-}
-
-sub prepare {
     my ($self, $query) = @_;
 
     return $self->query($query, prepare_only => 1);

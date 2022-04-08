@@ -23,15 +23,16 @@ package gorgone::modules::centreon::mbi::libs::bi::BIMetric;
 sub new {
 	my $class = shift;
 	my $self  = {};
-	$self->{"logger"}	= shift;
-	$self->{"centstorage"} = shift;
+
+	$self->{logger}	= shift;
+	$self->{centstorage} = shift;
 	if (@_) {
-		$self->{"centreon"}  = shift;
+		$self->{centreon}  = shift;
 	}
-	$self->{"today_table"} = "mod_bi_tmp_today_servicemetrics";
-	$self->{"tmpTable"} = "mod_bi_tmp_servicemetrics";
-	$self->{"CRC32"} = "mod_bi_tmp_servicemetrics_crc32";
-	$self->{"table"} = "mod_bi_servicemetrics";
+	$self->{today_table} = "mod_bi_tmp_today_servicemetrics";
+	$self->{tmpTable} = "mod_bi_tmp_servicemetrics";
+	$self->{CRC32} = "mod_bi_tmp_servicemetrics_crc32";
+	$self->{table} = "mod_bi_servicemetrics";
 	
 	bless $self, $class;
 	return $self;
@@ -39,21 +40,22 @@ sub new {
 
 sub insert {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
+	my $db = $self->{centstorage};
+
 	$self->insertMetricsIntoTable("mod_bi_servicemetrics");
 	$self->createTodayTable("false");
-	my $query = "INSERT INTO ".$self->{"today_table"}. " (id, metric_id, metric_name, sc_id,hg_id,hc_id)";
-	$query .= " SELECT id, metric_id, metric_name,sc_id,hg_id,hc_id FROM ".$self->{"table"}." ";
+	my $query = "INSERT INTO ".$self->{today_table}. " (id, metric_id, metric_name, sc_id,hg_id,hc_id)";
+	$query .= " SELECT id, metric_id, metric_name,sc_id,hg_id,hc_id FROM " . $self->{table} . " ";
 	$db->query($query);
 }
 
 sub update {
 	my ($self,$useMemory) = @_;
-	my $db = $self->{"centstorage"};
-	my $logger =  $self->{"logger"};
+
+	my $db = $self->{centstorage};
 	
 	$self->createTempTable($useMemory);
-    $self->insertMetricsIntoTable($self->{"tmpTable"});
+    $self->insertMetricsIntoTable($self->{tmpTable});
 	$self->createCRC32Table();
 	$self->insertNewEntries();
 	$self->createCRC32Table();
@@ -61,7 +63,6 @@ sub update {
 	$self->insertTodayEntries();
 	$db->query("DROP TABLE `".$self->{"tmpTable"}."`");
 	$db->query("DROP TABLE `".$self->{"CRC32"}."`");
-	
 }
 
 sub insertMetricsIntoTable {
@@ -81,6 +82,7 @@ sub insertMetricsIntoTable {
 
 sub createTempTable {
 	my ($self, $useMemory) = @_;
+
 	my $db = $self->{"centstorage"};
 	$db->query("DROP TABLE IF EXISTS `".$self->{"tmpTable"}."`");
 	my $query = "CREATE TABLE `".$self->{"tmpTable"}."` (";
@@ -93,7 +95,7 @@ sub createTempTable {
 	if (defined($useMemory) && $useMemory eq "true") {
 		$query .= ") ENGINE=MEMORY DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}else {
-		$query .= ") ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
+		$query .= ") ENGINE=INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}
 	$db->query($query);
 }
@@ -142,7 +144,7 @@ sub createTodayTable {
 	my $db = $self->{"centstorage"};
 	
 	$db->query("DROP TABLE IF EXISTS `".$self->{"today_table"}."`");
-	my $query = "CREATE TABLE `".$self->{"today_table"}."` (";
+	my $query = "CREATE TABLE `" . $self->{"today_table"} . "` (";
 	$query .= "`id` INT NOT NULL,";
 	$query .= "`metric_id` int(11) NOT NULL,";
 	$query .= "`metric_name` varchar(255) NOT NULL,";
@@ -154,7 +156,7 @@ sub createTodayTable {
 	if (defined($useMemory) && $useMemory eq "true") {
 		$query .= ") ENGINE=MEMORY DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}else {
-		$query .= ") ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
+		$query .= ") ENGINE=INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}
 	$db->query($query);
 }

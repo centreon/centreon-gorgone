@@ -141,7 +141,7 @@ sub createTempComparisonTable {
 	if (defined($useMemory) && $useMemory eq "true") {
 		$query .= ") ENGINE=MEMORY DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}else {
-		$query .= ") ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
+		$query .= ") ENGINE=INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}
 	$db->query($query);
 }
@@ -160,7 +160,7 @@ sub createTempStorageTable {
 	if (defined($useMemory) && $useMemory eq "true") {
 		$query .= ") ENGINE=MEMORY DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}else {
-		$query .= ") ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
+		$query .= ") ENGINE=INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}
 	$db->query($query);
 }
@@ -179,7 +179,7 @@ sub createTempTodayTable {
 	if (defined($useMemory) && $useMemory eq "true") {
 		$query .= ") ENGINE=MEMORY DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}else {
-		$query .= ") ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
+		$query .= ") ENGINE=INNODB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;";
 	}
 	$db->query($query);
 }

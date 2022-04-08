@@ -44,6 +44,9 @@ sub new {
     $self->{moptions}->{centreon_only} = 0;
     $self->{moptions}->{nopurge} = 0;
 
+    # importData: bam_only
+    # dimensions: centile
+
     $self->add_options(
         'url:s' => \$self->{url},
         'r'     => \$self->{moptions}->{rebuild},

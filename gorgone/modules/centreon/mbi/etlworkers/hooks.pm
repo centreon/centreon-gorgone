@@ -32,6 +32,7 @@ use constant NAMESPACE => 'centreon';
 use constant NAME => 'mbi-etlworkers';
 use constant EVENTS => [
     { event => 'CENTREONMBIETLWORKERSIMPORT' },
+    { event => 'CENTREONMBIETLWORKERSDIMENSIONS' },
     { event => 'CENTREONMBIETLWORKERSREADY' }
 ];
 

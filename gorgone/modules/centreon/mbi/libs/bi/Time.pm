@@ -22,7 +22,6 @@ package gorgone::modules::centreon::mbi::libs::bi::Time;
 
 use strict;
 use warnings;
-use POSIX;
 
 # Constructor
 # parameters:

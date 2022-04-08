@@ -30,7 +30,7 @@ sub sql {
     return if (!defined($options{params}->{sql}));
 
     foreach (@{$options{params}->{sql}}) {
-        push @{$etlwk->{messages}}, ['I', $_->[0]];
+        $etlwk->{messages}->writeLog('INFO', $_->[0]);
         if ($options{params}->{db} eq 'centstorage') {
             $etlwk->{dbbi_centstorage_con}->query($_->[1]);
         } elsif ($options{params}->{db} eq 'centreon') {
@@ -56,7 +56,7 @@ sub command {
         die $options{params}->{message} . ": execution failed: $stdout";
     }
 
-    push @{$etlwk->{messages}}, ['I', $options{params}->{message}];
+    $etlwk->{messages}->writeLog('INFO', $options{params}->{message});
     $etlwk->{logger}->writeLogDebug("[mbi-etlworkers] succeeded command (code: $return_code): $stdout");
 }
 

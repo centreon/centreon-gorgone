@@ -12,7 +12,6 @@
 
 use strict;
 use warnings;
-use POSIX;
 
 package gorgone::modules::centreon::mbi::libs::bi::BIService;
 

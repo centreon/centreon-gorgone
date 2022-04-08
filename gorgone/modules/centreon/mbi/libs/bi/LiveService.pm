@@ -12,7 +12,6 @@
 
 use strict;
 use warnings;
-use POSIX;
 
 package gorgone::modules::centreon::mbi::libs::bi::LiveService;
 
@@ -24,10 +23,11 @@ package gorgone::modules::centreon::mbi::libs::bi::LiveService;
 sub new {
 	my $class = shift;
 	my $self  = {};
-	$self->{"logger"}	= shift;
-	$self->{"centstorage"} = shift;
+
+	$self->{logger}	= shift;
+	$self->{centstorage} = shift;
 	if (@_) {
-		$self->{"centreon"}  = shift;
+		$self->{centreon}  = shift;
 	}
 	bless $self, $class;
 	return $self;

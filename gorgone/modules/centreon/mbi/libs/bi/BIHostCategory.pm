@@ -12,7 +12,6 @@
 
 use strict;
 use warnings;
-use POSIX;
 
 package gorgone::modules::centreon::mbi::libs::bi::BIHostCategory;
 
@@ -32,7 +31,6 @@ sub new {
 	bless $self, $class;
 	return $self;
 }
-
 
 sub getAllEntries {
 	my $self = shift;

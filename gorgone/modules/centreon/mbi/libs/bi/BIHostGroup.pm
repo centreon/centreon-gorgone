@@ -12,7 +12,6 @@
 
 use strict;
 use warnings;
-use POSIX;
 
 package gorgone::modules::centreon::mbi::libs::bi::BIHostGroup;
 
@@ -76,18 +75,19 @@ sub entryExists {
 }
 sub insert {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger =  $self->{"logger"};
+
+	my $db = $self->{centstorage};
+	my $logger =  $self->{logger};
 	my $data = shift;
 	my $query = "INSERT INTO `mod_bi_hostgroups`".
 				" (`hg_id`, `hg_name`)".
 				" VALUES (?,?)";
 	my $sth = $db->prepare($query);	
-	my $inst = $db->getInstance;
-	$inst->begin_work;
+	my $inst = $db->getInstance();
+	$inst->begin_work();
 	my $counter = 0;
 	
-	my $existingEntries = $self->getAllEntries;
+	my $existingEntries = $self->getAllEntries();
 	foreach (@$data) {
 		if (!$self->entryExists($_, $existingEntries)) {
 			my ($hg_id, $hg_name) = split(";", $_);
@@ -108,7 +108,7 @@ sub insert {
 			$counter++;
 		}
 	}
-	$inst->commit;
+	$inst->commit();
 }
 
 sub truncateTable {

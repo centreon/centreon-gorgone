@@ -63,6 +63,12 @@ sub type {
     return $self->{type};
 }
 
+sub getInstance {
+	my ($self) = @_;
+
+	return $self->{instance};
+}
+
 # Getter/Setter DB name
 sub db {
     my $self = shift;
@@ -329,6 +335,29 @@ Query: $query
     $self->{instance} = undef;
 }
 
+sub prepare {
+	my $self = shift;
+	my $query = shift;
+	
+	my $instance = $self->{"instance"};
+	my $logger = $self->{"logger"};
+	
+	$logger->writeLog("DEBUG", "MySQL query : ".$query);
+	my $statement_handle = $instance->prepare($query);
+	if (defined($instance->errstr)) {
+	  	$logger->writeLog("INFO", "MySQL query : ".$query);
+	  	$logger->writeLog("FATAL", "MySQL error : ".$instance->errstr);
+	}
+
+    return $statement_handle;
+}
+
+sub prepare {
+    my ($self, $query) = @_;
+
+    return $self->query($query, prepare_only => 1);
+}
+
 sub query {
     my $self = shift;
     my $query = shift;
@@ -363,6 +392,7 @@ sub query {
         }
 
         if (defined($options{prepare_only})) {
+            return $statement_handle if ($self->{die} == 1);
             return ($status, $statement_handle);
         }
 
@@ -382,6 +412,7 @@ sub query {
         die $self->{lastError} if ($status == -1);
         return $statement_handle;
     }
+
     return ($status, $statement_handle);
 }
 

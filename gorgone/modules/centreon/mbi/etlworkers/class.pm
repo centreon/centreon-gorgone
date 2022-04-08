@@ -32,6 +32,8 @@ use ZMQ::Constants qw(:all);
 use JSON::XS;
 use Try::Tiny;
 use gorgone::modules::centreon::mbi::etlworkers::import::main;
+use gorgone::modules::centreon::mbi::etlworkers::dimensions::main;
+use gorgone::modules::centreon::mbi::libs::Messages;
 
 my %handlers = (TERM => {}, HUP => {});
 my ($connector);
@@ -91,13 +93,32 @@ sub db_connections {
             %{$options{dbmon}->{centstorage}}
         );
     }
-    if (!defined($self->{dbbi_centstorage_con}) || $self->{dbmon_centstorage_con}->sameParams(%{$options{dbbi}->{centstorage}}) == 0) {
+    if (!defined($self->{dbbi_centstorage_con}) || $self->{dbbi_centstorage_con}->sameParams(%{$options{dbbi}->{centstorage}}) == 0) {
        $self->{dbbi_centstorage_con} = gorgone::class::db->new(
             type => 'mysql',
             force => 2,
             logger => $self->{logger},
             die => 1,
             %{$options{dbbi}->{centstorage}}
+        );
+    }
+
+    if (!defined($self->{dbmon_centreon_con}) || $self->{dbmon_centreon_con}->sameParams(%{$options{dbmon}->{centreon}}) == 0) {
+        $self->{dbmon_centreon_con} = gorgone::class::db->new(
+            type => 'mysql',
+            force => 2,
+            logger => $self->{logger},
+            die => 1,
+            %{$options{dbmon}->{centreon}}
+        );
+    }
+    if (!defined($self->{dbbi_centreon_con}) || $self->{dbbi_centreon_con}->sameParams(%{$options{dbbi}->{centreon}}) == 0) {
+       $self->{dbbi_centreon_con} = gorgone::class::db->new(
+            type => 'mysql',
+            force => 2,
+            logger => $self->{logger},
+            die => 1,
+            %{$options{dbbi}->{centreon}}
         );
     }
 }
@@ -107,7 +128,7 @@ sub action_centreonmbietlworkersimport {
 
     $options{token} = $self->generate_token() if (!defined($options{token}));
 
-    $self->{messages} = [];
+    $self->{messages} = gorgone::modules::centreon::mbi::libs::Messages->new();
     my $code = GORGONE_ACTION_FINISH_OK;
 
     try {
@@ -121,15 +142,51 @@ sub action_centreonmbietlworkersimport {
             gorgone::modules::centreon::mbi::etlworkers::import::main::command($self, params => $options{data}->{content}->{params});
         }
     } catch {
-        push @{$self->{messages}}, ['E', $_];
         $code = GORGONE_ACTION_FINISH_KO;
+        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
     };
 
     $self->send_log(
         code => $code,
         token => $options{token},
         data => {
-            messages => $self->{messages}
+            messages => $self->{messages}->getLogs()
+        }
+    );
+}
+
+sub action_centreonmbietlworkersdimensions {
+    my ($self, %options) = @_;
+
+    $options{token} = $self->generate_token() if (!defined($options{token}));
+
+    $self->{messages} = gorgone::modules::centreon::mbi::libs::Messages->new();
+    my $code = GORGONE_ACTION_FINISH_OK;
+
+    try {
+        $self->db_connections(
+            dbmon => $options{data}->{content}->{dbmon},
+            dbbi => $options{data}->{content}->{dbbi}
+        );
+
+        gorgone::modules::centreon::mbi::etlworkers::dimensions::main::execute(
+            $self,
+            dbmon => $options{data}->{content}->{dbmon},
+            dbbi => $options{data}->{content}->{dbbi},
+            params => $options{data}->{content}->{params},
+            etlProperties => $options{data}->{content}->{etlProperties},
+            options => $options{data}->{content}->{options}
+        );
+    } catch {
+        $code = GORGONE_ACTION_FINISH_KO;
+        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
+    };
+
+    $self->send_log(
+        code => $code,
+        token => $options{token},
+        data => {
+            messages => $self->{messages}->getLogs()
         }
     );
 }

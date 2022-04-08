@@ -58,7 +58,7 @@ if [ -d "$DISTRIB" ] ; then
 fi
 mkdir $DISTRIB
 mv /build/tmp/libmojolicious-plugin-basicauthplus-perl_0.11.3-${RELEASE}_all.deb $DISTRIB/
-mv /build/tmp/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
+mv /build/tmp/zmq-libzmq4-perl/zmq-libzmq4-perl_0.02-${RELEASE}_all.deb $DISTRIB/
 mv /build/tmp/libzmq-constants-perl_1.04-${RELEASE}_all.deb $DISTRIB/
 mv /build/*.deb $DISTRIB/
 mv /build/$DISTRIB/*.deb /src

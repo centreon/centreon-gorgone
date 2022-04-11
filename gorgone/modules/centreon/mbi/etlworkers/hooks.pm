@@ -33,6 +33,7 @@ use constant NAME => 'mbi-etlworkers';
 use constant EVENTS => [
     { event => 'CENTREONMBIETLWORKERSIMPORT' },
     { event => 'CENTREONMBIETLWORKERSDIMENSIONS' },
+    { event => 'CENTREONMBIETLWORKERSEVENT' },
     { event => 'CENTREONMBIETLWORKERSREADY' }
 ];
 

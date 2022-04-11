@@ -33,6 +33,7 @@ use JSON::XS;
 use Try::Tiny;
 use gorgone::modules::centreon::mbi::etlworkers::import::main;
 use gorgone::modules::centreon::mbi::etlworkers::dimensions::main;
+use gorgone::modules::centreon::mbi::etlworkers::event::main;
 use gorgone::modules::centreon::mbi::libs::Messages;
 
 my %handlers = (TERM => {}, HUP => {});
@@ -180,6 +181,39 @@ sub action_centreonmbietlworkersdimensions {
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;
         $self->{messages}->writeLog('ERROR', $_, 1);
+    };
+
+    $self->send_log(
+        code => $code,
+        token => $options{token},
+        data => {
+            messages => $self->{messages}->getLogs()
+        }
+    );
+}
+
+sub action_centreonmbietlworkersevent {
+    my ($self, %options) = @_;
+
+    $options{token} = $self->generate_token() if (!defined($options{token}));
+
+    $self->{messages} = gorgone::modules::centreon::mbi::libs::Messages->new();
+    my $code = GORGONE_ACTION_FINISH_OK;
+
+    try {
+        $self->db_connections(
+            dbbi => $options{data}->{content}->{dbbi}
+        );
+        if ($options{data}->{content}->{params}->{type} eq 'sql') {
+            gorgone::modules::centreon::mbi::etlworkers::event::main::sql($self, params => $options{data}->{content}->{params});
+        } elsif ($options{data}->{content}->{params}->{type} eq 'events') {
+            gorgone::modules::centreon::mbi::etlworkers::import::main::events($self, params => $options{data}->{content}->{params});
+        } elsif ($options{data}->{content}->{params}->{type} =~ /^availability_/) {
+            gorgone::modules::centreon::mbi::etlworkers::import::main::availability($self, params => $options{data}->{content}->{params});
+        }
+    } catch {
+        $code = GORGONE_ACTION_FINISH_KO;
+        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
     };
 
     $self->send_log(

@@ -210,6 +210,50 @@ sub execute_action {
     );
 }
 
+sub watch_etl_event {
+    my ($self, %options) = @_;
+
+    if (defined($options{indexes})) {
+        $self->{run}->{schedule}->{import}->{substeps_executed}++;
+        my ($idx, $idx2) = split(/-/, $options{indexes});
+        $self->{run}->{schedule}->{event}->{stages}->[$idx]->[$idx2]->{status} = FINISHED;
+    }
+
+    return if (!$self->check_stopped());
+
+    if ($self->{run}->{schedule}->{event}->{substeps_executed} >= $self->{run}->{schedule}->{event}->{substeps_total}) {
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][EVENT] finished'] ] });
+        $self->{run}->{schedule}->{event}->{status} = FINISHED;
+        return ;
+    }
+
+    my $stage = $self->{run}->{schedule}->{event}->{current_stage};
+    my $stage_finished = 0;
+    while ($stage <= 2) {
+        while (my ($idx, $val) = each(@{$self->{run}->{schedule}->{event}->{stages}->[$stage]})) {
+            if (!defined($val->{status})) {
+                $self->{logger}->writeLogDebug("[mbi-etl] execute substep event-$stage-$idx");
+                $self->{run}->{schedule}->{event}->{substeps_execute}++;
+                $self->execute_action(
+                    action => 'CENTREONMBIETLWORKERSEVENT',
+                    substep => "event-$stage-$idx",
+                    params => %{$self->{run}->{schedule}->{event}->{stages}->[$stage]->[$idx]}
+                );
+                $self->{run}->{schedule}->{event}->{stages}->[$stage]->[$idx]->{status} = RUNNING;
+            } elsif ($val->{status} == FINISHED) {
+                $stage_finished++;
+            }
+        }
+
+        if ($stage_finished >= scalar(@{$self->{run}->{schedule}->{event}->{stages}->[$stage]})) {
+            $self->{run}->{schedule}->{event}->{current_stage}++;
+            $stage = $self->{run}->{schedule}->{event}->{current_stage};
+        } else {
+            last;
+        }
+    }
+}
+
 sub watch_etl_dimensions {
     my ($self, %options) = @_;
 
@@ -346,6 +390,8 @@ sub run_etl_event {
         scalar(@{$self->{run}->{schedule}->{event}->{stages}->[0]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[1]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[2]});
 
     $self->{logger}->writeLogDebug("[mbi-etl] event substeps " . $self->{run}->{schedule}->{event}->{substeps_total});
+
+    $self->watch_etl_event();
 }
 
 sub run_etl_perfdata {
@@ -390,7 +436,9 @@ sub check_stopped_dimensions {
 sub check_stopped_event {
     my ($self, %options) = @_;
 
-    return 0;
+    return 0 if ($self->{run}->{schedule}->{event}->{substeps_executed} >= $self->{run}->{schedule}->{event}->{substeps_execute});
+
+    return 1;
 }
 
 sub check_stopped_perfdata {
@@ -564,7 +612,7 @@ sub action_centreonmbietllistener {
     } elsif ($type eq 'dimensions') {
         $self->watch_etl_dimensions(indexes => $indexes);
     } elsif ($type eq 'event') {
-        
+        $self->watch_etl_event(indexes => $indexes);
     } elsif ($type eq 'perfdata') {
         
     }

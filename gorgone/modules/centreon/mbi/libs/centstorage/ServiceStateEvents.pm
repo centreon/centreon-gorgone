@@ -68,7 +68,7 @@ sub agreggateEventsByTimePeriod {
 	$query .= " AND end_time > ".$start."";
 	$query .= " AND in_downtime = 0 ";
 	$query .= " ORDER BY start_time ";
-	
+
 	my $serviceEventObjects = $self->{"biServiceStateEventsObj"};
 	my $sth = $db->query($query);
 	$serviceEventObjects->createTempBIEventsTable();
@@ -106,7 +106,6 @@ sub agreggateEventsByTimePeriod {
 		$nbEventTreated++;
 	}
 	($db->getInstance)->commit;
-	$sth->finish();
 }
 
 sub processIncidentForTp {

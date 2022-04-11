@@ -128,12 +128,6 @@ sub getDayEvents {
 	my ($start, $end, $liveserviceId, $ranges) = @_;
 	my %results = ();
 	
-	# Profiling >>>>>
-	my $baseTime = time();
-	my $diffTime = 0;
-	my $countEvent = 0;
-	# <<<< Profiling
-	
 	my $query = "SELECT start_time, end_time, state, modbihost_id";
 	$query .= " FROM `".$self->{'name'}."`";
 	$query .= " WHERE `start_time` < ".$end."";
@@ -141,13 +135,7 @@ sub getDayEvents {
     $query .= " AND `state` in (0,1,2)";
     $query .= " AND modbiliveservice_id = ".$liveserviceId;
 	my $sth = $db->query($query);
-	
-	# Profiling >>>>>
-	$diffTime = time() - $baseTime;
-	$self->{"logger"}->writeLog("DEBUG","[".localtime(time)."][PROFILING][HOST] Get all events for period between ".$start." and ".$end. " for liveservice_id ".$liveserviceId." :[".$diffTime."]sec");
-	$baseTime = time();
-	# <<<< Profiling
-	
+
 	#For each events, for the current day, calculate statistics for the day
 	while (my $row = $sth->fetchrow_hashref()) {
 	 
@@ -201,13 +189,8 @@ sub getDayEvents {
 		}
 
 		$results{$entryID} = $stats;
-		
-		# Profiling >>>>>
-		$countEvent++;
     }
-	$diffTime = time() - $baseTime;
-	$self->{"logger"}->writeLog("DEBUG","[".localtime(time)."][PROFILING][HOST] ".$countEvent." events have been calculated in :[".$diffTime."]sec");
-	# <<<< Profiling
+
     return (\%results);
 }
 

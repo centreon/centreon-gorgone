@@ -151,12 +151,11 @@ sub display_messages {
 sub get_etl_log {
     my ($self) = @_;
 
-    my $ctime;
-    my $progress = 0;
+    my $log_id;
     while (1) {
         my $get_param = [];
-        if (defined($ctime)) {
-            $get_param = ['ctime=' . $ctime];
+        if (defined($log_id)) {
+            $get_param = ['id=' . $log_id];
         }
 
         my ($code, $content) = $self->{http}->request(
@@ -179,8 +178,6 @@ sub get_etl_log {
             exit(1);
         }
 
-        $ctime = time();
-
         my $decoded = $self->json_decode(content => $content);
         if (!defined($decoded->{data})) {
             $self->{logger}->writeLogError("Cannot get log information");
@@ -190,6 +187,9 @@ sub get_etl_log {
         my $stop = 0;
         foreach (@{$decoded->{data}}) {
             my $data = $self->json_decode(content => $_->{data});
+            next if (defined($log_id) && $log_id >= $_->{id});
+            $log_id = $_->{id};
+
             if ($_->{code} == 600) {
                 $self->display_messages(data => $data);
             } elsif ($_->{code} == 1) {

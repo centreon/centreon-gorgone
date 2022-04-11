@@ -89,11 +89,12 @@ sub insertStats {
 
 	my $sth = $db->prepare($query);	
 	my $inst = $db->getInstance;
+	$inst->begin_work;
 	my $counter = 0;
 	
 	while (my ($modBiServiceId, $stats) = each %$data) {
 		my @tab = @$stats;
-		if ($stats->[0] + $stats->[1] + $stats->[4] == 0) {
+		if ($stats->[0]+$stats->[1]+$stats->[4] == 0) {
 			next;
 		}
 		my $j = 1;
@@ -110,9 +111,15 @@ sub insertStats {
 
 		if ($counter >= $commitParam) {
 			$counter = 0;
+			$inst->commit();
+			if (defined($inst->errstr)) {
+	  			$logger->writeLog("FATAL", $self->{'name'}." insertion commit error : ".$inst->errstr);
+			}
+			$inst->begin_work();
 		}
 		$counter++;
 	}
+	$inst->commit();
 }
 
 sub getCurrentNbLines{
@@ -134,9 +141,7 @@ sub setCurrentNbLines{
 sub getHGMonthAvailability {
 	my ($self, $start, $end, $eventObj) = @_;
 	my $db = $self->{"centstorage"};
-	
 
-	$self->{"logger"}->writeLog("INFO","[SERVICE] Calculating availability for services");
 	my $query = "SELECT  s.hg_id, s.hc_id, s.sc_id, sa.liveservice_id,";
 	$query .= "  hc.id as hcat_id, hg.id as group_id, sc.id as scat_id,";
 	$query .= " avg((available+degraded)/(available+unavailable+degraded)) as av_percent,";
@@ -153,14 +158,11 @@ sub getHGMonthAvailability {
 	$query .= " WHERE t.year = YEAR('".$start."') AND t.month = MONTH('".$start."') and t.hour=0";
 	$query .= " GROUP BY s.hg_id, s.hc_id, s.sc_id, sa.liveservice_id";
 	my $sth = $db->query($query);
-	
 
-	$self->{"logger"}->writeLog("INFO","[SERVICE] Calculating MTBF/MTRS/MTBSI for services");
 	my @data = ();
 	while (my $row = $sth->fetchrow_hashref()) {
 		my ($totalwarnEvents, $totalCritEvents, $totalOtherEvents) = $eventObj->getNbEvents($start, $end, $row->{'hg_id'}, $row->{'hc_id'}, $row->{'sc_id'}, $row->{'liveservice_id'}); 
 
-		
 		my ($mtrs, $mtbf, $mtbsi) = (undef, undef, undef);
 		if (defined($totalCritEvents) && $totalCritEvents != 0) {
 			$mtrs = $row->{'unav_time'}/$totalCritEvents;
@@ -180,7 +182,6 @@ sub getHGMonthAvailability_optimised {
 	my ($self, $start, $end, $eventObj) = @_;
 	my $db = $self->{"centstorage"};
 	
-	$self->{"logger"}->writeLog("DEBUG","[SERVICE] Calculating availability,MTBF,MTRS,MTBSI for services");
 	my $query = "SELECT * from  ( SELECT  s.hg_id, s.hc_id, s.sc_id, sa.liveservice_id,   hc.id as hcat_id, hg.id as group_id, sc.id as scat_id,"; 
 	$query .= "avg((available+degraded)/(available+unavailable+degraded)) as av_percent, ";
 	$query .= "sum(available) as av_time, sum(unavailable) as unav_time, sum(degraded) as degraded_time, ";

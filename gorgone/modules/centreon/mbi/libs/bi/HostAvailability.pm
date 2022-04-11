@@ -63,6 +63,7 @@ sub insertStats {
 				" VALUES (?,?,?,?,?,?,?,?,?,?)";
 	my $sth = $db->prepare($query);	
 	my $inst = $db->getInstance;
+	$inst->begin_work();
 	my $counter = 0;
 	
 	while (my ($modBiHostId, $stats) = each %$data) {
@@ -77,17 +78,23 @@ sub insertStats {
 		for (my $i = 0; $i < scalar(@$stats); $i++) {
 			$sth->bind_param($i + $j, $stats->[$i]);
 		}
-		$sth->execute();
+		$sth->execute;
 		if (defined($inst->errstr)) {
 	  		$logger->writeLog("FATAL", $self->{"name"}." insertion execute error : ".$inst->errstr);
 		}
 		if ($counter >= $commitParam) {
 			$counter = 0;
+			$inst->commit();
+			
+			if (defined($inst->errstr)) {
+	  			$logger->writeLog("FATAL", $self->{"name"}." insertion commit error : ".$inst->errstr);
+			}
+			$inst->begin_work();
 		}
 		$counter++;
 	}
+	$inst->commit();
 }
-
 sub saveStatsInFile {
 	my $self = shift;
 	my $db = $self->{"centstorage"};

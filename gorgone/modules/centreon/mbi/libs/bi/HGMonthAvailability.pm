@@ -12,7 +12,6 @@
 
 use strict;
 use warnings;
-use POSIX;
 
 package gorgone::modules::centreon::mbi::libs::bi::HGMonthAvailability;
 
@@ -44,6 +43,7 @@ sub getTimeColumn() {
 	my $self = shift;
 	return $self->{'timeColumn'};
 }
+
 
 sub insertStats {
 	my $self = shift;

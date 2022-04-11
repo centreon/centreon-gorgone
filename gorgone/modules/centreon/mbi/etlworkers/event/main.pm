@@ -25,6 +25,8 @@ use warnings;
 use gorgone::modules::centreon::mbi::libs::centreon::Timeperiod;
 use gorgone::modules::centreon::mbi::libs::bi::HostAvailability;
 use gorgone::modules::centreon::mbi::libs::bi::ServiceAvailability;
+use gorgone::modules::centreon::mbi::libs::bi::HGMonthAvailability;
+use gorgone::modules::centreon::mbi::libs::bi::HGServiceMonthAvailability;
 use gorgone::modules::centreon::mbi::libs::bi::Time;
 use gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 use gorgone::modules::centreon::mbi::libs::bi::BIHostStateEvents;
@@ -37,6 +39,7 @@ use gorgone::standard::misc;
 
 my ($utils, $time, $tablesManager, $timePeriod);
 my ($hostAv, $serviceAv);
+my ($hgAv, $hgServiceAv);
 my ($biHostEvents, $biServiceEvents);
 my ($hostEvents, $serviceEvents);
 my ($liveService);
@@ -55,6 +58,8 @@ sub initVars {
 	$serviceEvents = gorgone::modules::centreon::mbi::libs::centstorage::ServiceStateEvents->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $biServiceEvents, $timePeriod);
     $hostAv = gorgone::modules::centreon::mbi::libs::bi::HostAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
 	$serviceAv = gorgone::modules::centreon::mbi::libs::bi::ServiceAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+    $hgAv = gorgone::modules::centreon::mbi::libs::bi::HGMonthAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+	$hgServiceAv = gorgone::modules::centreon::mbi::libs::bi::HGServiceMonthAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
 }
 
 sub sql {
@@ -191,6 +196,22 @@ sub availabilityDayServices {
     $serviceAv->insertStats($dayEvents, $options{startTimeId}, $options{params}->{liveserviceId});
 }
 
+sub availabilityMonthHosts {
+    my ($etlwk, %options) = @_;
+
+    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing services month: $options{params}->{start} => $options{params}->{end}");
+    my $data = $hostAv->getHGMonthAvailability($options{params}->{start}, $options{params}->{end}, $biHostEvents);
+    $hgAv->insertStats($options{startTimeId}, $data);
+}
+
+sub availabilityMonthServices {
+    my ($etlwk, %options) = @_;
+
+    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing hosts month: $options{params}->{start} => $options{params}->{end}");
+    my $data = $serviceAv->getHGMonthAvailability_optimised($options{params}->{start}, $options{params}->{end}, $biServiceEvents);
+    $hgServiceAv->insertStats($options{startTimeId}, $data);
+}
+
 sub availability {
     my ($etlwk, %options) = @_;
 
@@ -220,9 +241,19 @@ sub availability {
             startWeekDay => $startWeekDay,
             %options
         );
+    } elsif ($options{params}->{type} eq 'availability_month_services') {
+         availabilityMonthServices(
+            $etlwk,
+            startTimeId => $startTimeId,
+            %options
+         );
+    } elsif ($options{params}->{type} eq 'availability_month_hosts') {
+        availabilityMonthHosts(
+            $etlwk,
+            startTimeId => $startTimeId,
+            %options
+        );
     }
-
-    #use Data::Dumper; print Data::Dumper::Dumper(\%options);
 }
 
 1;

@@ -43,21 +43,20 @@ sub getTimeRangesForDay {
 	my @weekDays = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday");
 	my $query = "SELECT tp_".$weekDay;
 	$query .= " FROM timeperiod";
-	$query .= " WHERE  tp_name='".$name."'";
+	$query .= " WHERE tp_name = '".$name."'";
 	my $sth = $db->query($query);
-    if(my $row = $sth->fetchrow_hashref()) {
+    if (my $row = $sth->fetchrow_hashref()) {
     	if (defined($row->{'tp_'.$weekDay})) {
 			my @ranges = split(",", $row->{'tp_'.$weekDay});
-			foreach(@ranges) {
+			foreach (@ranges) {
 				my ($start, $end) = split("-", $_);
 				my ($start_hour, $start_min) = split(":", $start);
 				my ($end_hour, $end_min) = split(":", $end);
-				my @range =   ($unixtime+ $start_hour * 60 * 60 + $start_min * 60, $unixtime+ $end_hour * 60 * 60 + $end_min * 60);
+				my @range = ($unixtime+ $start_hour * 60 * 60 + $start_min * 60, $unixtime + $end_hour * 60 * 60 + $end_min * 60);
 				$results[scalar(@results)] = \@range;
 			}
     	}
 	}
-	$sth->finish();
 		
 	return (\@results);
 }
@@ -78,7 +77,7 @@ sub getTimeRangesForDayByDateTime {
 			foreach(@ranges) {
 				my ($start, $end) = split("-", $_);
 				my $range_end = "'".$dateTime." ".$end.":00'";
-				if ($end eq "24:00") {
+				if ($end eq '24:00') {
 					$range_end = "DATE_ADD('".$dateTime."', INTERVAL 1 DAY)";
 				}
 				my @range =  ("'".$dateTime." ".$start.":00'", $range_end);

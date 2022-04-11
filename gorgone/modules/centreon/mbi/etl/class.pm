@@ -32,7 +32,9 @@ use ZMQ::LibZMQ4;
 use ZMQ::Constants qw(:all);
 use XML::LibXML::Simple;
 use JSON::XS;
+use gorgone::modules::centreon::mbi::libs::Messages;
 use gorgone::modules::centreon::mbi::etl::import::main;
+use gorgone::modules::centreon::mbi::etl::event::main;
 use gorgone::modules::centreon::mbi::libs::centreon::ETLProperties;
 use Try::Tiny;
 
@@ -331,7 +333,21 @@ sub run_etl_dimensions {
 
 sub run_etl_event {
     my ($self, %options) = @_;
-    
+
+    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][EVENT] Prepare' ] ] });
+
+    gorgone::modules::centreon::mbi::etl::event::main::prepare($self);
+
+    $self->{run}->{schedule}->{event}->{status} = RUNNING;
+    $self->{run}->{schedule}->{event}->{current_stage} = 0;
+    $self->{run}->{schedule}->{event}->{substeps_execute} = 0;
+    $self->{run}->{schedule}->{event}->{substeps_executed} = 0;
+    $self->{run}->{schedule}->{event}->{substeps_total} = 
+        scalar(@{$self->{run}->{schedule}->{event}->{stages}->[0]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[1]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[2]});
+
+    $self->{logger}->writeLogDebug("[mbi-etl] event substeps " . $self->{run}->{schedule}->{event}->{substeps_total});
+
+    use Data::Dumper; print Data::Dumper::Dumper($self->{run}->{schedule}->{event});
 }
 
 sub run_etl_perfdata {
@@ -471,6 +487,7 @@ sub action_centreonmbietlrun {
         return $self->runko(token => $options{token}, msg => '[SCHEDULER] currently wait previous execution finished - can restart gorgone mbi process') if ($self->{run}->{status} == STOP);
 
         $self->{run}->{token} = $options{token};
+        $self->{run}->{messages} = gorgone::modules::centreon::mbi::libs::Messages->new();
 
         $self->check_basic_options(%{$options{data}->{content}});
 
@@ -479,8 +496,8 @@ sub action_centreonmbietlrun {
             steps_executed => 0,
             planned => NOTDONE,
             import => { status => UNPLANNED, actions => [] },
-            dimensions => { status => UNPLANNED, token => '' },
-            event => { status => UNPLANNED, actions => [] },
+            dimensions => { status => UNPLANNED },
+            event => { status => UNPLANNED, stages => [ [], [], [] ] },
             perfdata => { status => UNPLANNED, actions => [] }
         };
         $self->{run}->{status} = RUNNING;

@@ -122,13 +122,13 @@ sub getYesterdayTodayDate {
 		$yesterday = $row->{yesterday};
 		$today =  $row->{today};
 	} else {
-        die "TIME: cannot get yesterday date";
+        $self->{logger}->writeLog('ERROR', "TIME: cannot get yesterday date");
 	}
 	if (!defined($yesterday)) {
-        die "TIME: Yesterday start date is null";
+        $self->{logger}->writeLog('ERROR', "TIME: Yesterday start date is null");
 	}
 	if (!defined($today)) {
-        die "TIME: today start date is null";
+        $self->{logger}->writeLog('ERROR', "TIME: today start date is null");
 	}
 	return ($yesterday, $today);
 }
@@ -145,7 +145,7 @@ sub addDateInterval {
 		$newDate = $row->{newDate};
 	}
 	if (!defined($newDate)) {
-        die "TIME: DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") returns null value";
+        $self->{logger}->writeLog('ERROR', "TIME: DATE_ADD('".$date."', INTERVAL ".$interval." ".$intervalType.") returns null value");
 	}
 	return $newDate;
 }
@@ -159,13 +159,12 @@ sub compareDates {
         return $row->{nbDays};
     }
 
-    die("TIME: Cannot compare two dates : ".$date1." and ".$date2);
+    $self->{logger}->writeLog('ERROR', "TIME: Cannot compare two dates : ".$date1." and ".$date2);
 }
 
 sub insertTimeEntriesForPeriod {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
 	my ($start, $end) = @_;
 	
 	my $interval = $self->getTotalDaysInPeriod($start, $end) * 24;
@@ -187,13 +186,13 @@ sub insertTimeEntriesForPeriod {
 		$date = "ADDDATE('".$start."',INTERVAL ".$counter." HOUR)";
 		if ($counter % 30 == 0) {
 			chop($query_suffix);
-			$db->query($self->{'insertQuery'}.$query_suffix);
+			$db->query($self->{insertQuery} . $query_suffix);
 			$query_suffix = "";
 		}
 	}
 	chop($query_suffix);
 	if ($query_suffix ne "") {
-		$db->query($self->{'insertQuery'}.$query_suffix);
+		$db->query($self->{insertQuery} . $query_suffix);
 	}
 }
 

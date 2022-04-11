@@ -32,9 +32,9 @@ my ($argsMon, $argsBi);
 sub initVars {
     my ($etl) = @_;
 
-    $biTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{logger}, $etl->{run}->{dbbi_centstorage_con});
-    $monTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{logger}, $etl->{run}->{dbmon_centstorage_con});
-    $utils = gorgone::modules::centreon::mbi::libs::Utils->new();
+    $biTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{run}->{messages}, $etl->{run}->{dbbi_centstorage_con});
+    $monTables = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etl->{run}->{messages}, $etl->{run}->{dbmon_centstorage_con});
+    $utils = gorgone::modules::centreon::mbi::libs::Utils->new($etl->{run}->{messages});
     $argsMon = $utils->buildCliMysqlArgs($etl->{run}->{dbmon}->{centstorage});
     $argsBi = $utils->buildCliMysqlArgs($etl->{run}->{dbbi}->{centstorage});
 }
@@ -359,7 +359,7 @@ sub prepare {
     } else {
         # set yesterday start and end dates as period (--daily)
         my %dates;
-        ($dates{start}, $dates{end}) = $etl->{time}->getYesterdayTodayDate();
+        ($dates{start}, $dates{end}) = $utils->getYesterdayTodayDate();
         $periods{raw_perfdata} = \%dates;
         $periods{raw_availabilitydata} = \%dates;
     }

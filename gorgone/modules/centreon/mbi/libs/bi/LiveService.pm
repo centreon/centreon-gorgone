@@ -44,9 +44,8 @@ sub getLiveServicesByName {
 	my $sth = $db->query($query);
 	my %result = ();
 	while (my $row = $sth->fetchrow_hashref()) {
-		$result{$row->{'name'}} = $row->{"id"};
+		$result{ $row->{name} } = $row->{id};
 	}
-	$sth->finish();
 	return (\%result);
 }
 
@@ -62,7 +61,6 @@ sub getLiveServicesByTpId {
 	while (my $row = $sth->fetchrow_hashref()) {
 		$result{$row->{'timeperiod_id'}} = $row->{"id"};
 	}
-	$sth->finish();
 	return (\%result);
 }
 
@@ -79,7 +77,6 @@ sub getLiveServicesByNameForTpId {
 	while (my $row = $sth->fetchrow_hashref()) {
 		($name, $id) = ($row->{'name'}, $row->{'id'});
 	}
-	$sth->finish();
 	return ($name,$id);
 }
 
@@ -106,11 +103,10 @@ sub getLiveServiceIdsInString {
 sub getLiveServicesByNameForTpIds {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
-	my $logger = $self->{'logger'};
 	my $ids = shift;
-	
+
 	my $idStr = "";
-	
+
 	foreach my $key (keys %$ids) {
 		if ($idStr eq "") {
 		$idStr .= $key;			
@@ -119,7 +115,7 @@ sub getLiveServicesByNameForTpIds {
 		}
 	}
 	if ($idStr eq "") {
-		$logger->writeLog("ERROR", "Select a timeperiod in the ETL configuration menu");
+		$self->{logger}->writeLog("ERROR", "Select a timeperiod in the ETL configuration menu");
 	}
 	my $query = "SELECT `id`, `name`";
 	$query .= " FROM mod_bi_liveservice";
@@ -127,7 +123,7 @@ sub getLiveServicesByNameForTpIds {
 	my $sth = $db->query($query);
 	my %result = ();
     while (my $row = $sth->fetchrow_hashref()) {
-    	$result{$row->{'name'}} = $row->{'id'};
+    	$result{ $row->{name} } = $row->{id};
     }
     return \%result;
 }

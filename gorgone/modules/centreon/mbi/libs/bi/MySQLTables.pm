@@ -129,7 +129,7 @@ sub updateParts {
 	my $isPartitioned = $self->isTablePartitioned($tableName);
 	if (!$isPartitioned) {
 		$logger->writeLog("WARNING", "[UPDATE PARTS] partitioning is not activated for table [".$tableName."]");
-	}else {
+	} else {
 		my $range = $self->getLastPartRange($tableName);
 		$range = $timeObj->addDateInterval($range, 1, "DAY");
         while ($timeObj->compareDates($rangeEnd, $range) >= 0) {
@@ -146,8 +146,7 @@ sub isTablePartitioned {
 	my $self = shift;
 	my $tableName = shift;
 	my $db = $self->{"centstorage"};
-	my $logger = $self->{"logger"};
-	
+
 	my $sth = $db->query("SHOW TABLE STATUS LIKE '".$tableName."'");
 	if (my $row = $sth->fetchrow_hashref()) {
 		my $createOptions = $row->{"Create_options"};
@@ -157,7 +156,7 @@ sub isTablePartitioned {
 			return 0;
 		}
 	}
-	$logger->writeLog("FATAL", "[TABLE STATUS CHECK] Cannot check if table is partitioned [".$tableName."]");
+	die "[TABLE STATUS CHECK] Cannot check if table is partitioned [".$tableName."]";
 }
 
 sub getLastPartRange {

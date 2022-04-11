@@ -110,7 +110,7 @@ sub denormalizeDimensionsFromCentreon {
     $etlwk->{messages}->writeLog("INFO", "Getting host properties from Centreon database");
     my $rows = $host->getHostGroupAndCategories();
     $etlwk->{messages}->writeLog("INFO", "Updating host dimension in Centstorage");
-    if (defined($options{options}->{rebuild}) && !defined($options{options}->{nopurge})) {
+    if ($options{options}->{rebuild} == 1 && $options{options}->{nopurge} == 0) {
         $biHost->insert($rows);
     } else {
         $biHost->update($rows, $options{etlProperties}->{'tmp.storage.memory'});

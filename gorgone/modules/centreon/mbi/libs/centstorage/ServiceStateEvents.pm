@@ -1,39 +1,22 @@
-################################################################################
-# Copyright 2005-2015 CENTREON
-# Centreon is developped by : Julien Mathis and Romain Le Merlus under
-# GPL Licence 2.0.
 # 
-# This program is free software; you can redistribute it and/or modify it under 
-# the terms of the GNU General Public License as published by the Free Software 
-# Foundation ; either version 2 of the License.
-# 
-# This program is distributed in the hope that it will be useful, but WITHOUT ANY
-# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A 
-# PARTICULAR PURPOSE. See the GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License along with 
-# this program; if not, see <http://www.gnu.org/licenses>.
-# 
-# Linking this program statically or dynamically with other modules is making a 
-# combined work based on this program. Thus, the terms and conditions of the GNU 
-# General Public License cover the whole combination.
-# 
-# As a special exception, the copyright holders of this program give CENTREON 
-# permission to link this program with independent modules to produce an executable, 
-# regardless of the license terms of these independent modules, and to copy and 
-# distribute the resulting executable under terms of CENTREON choice, provided that 
-# CENTREON also meet, for each linked independent module, the terms  and conditions 
-# of the license of that module. An independent module is a module which is not 
-# derived from this program. If you modify this program, you may extend this 
-# exception to your version of the program, but you are not obliged to do so. If you
-# do not wish to do so, delete this exception statement from your version.
-# 
-# For more information : contact@centreon.com
-# 
-# SVN : $URL
-# SVN : $Id
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-####################################################################################
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 use strict;
 use warnings;
@@ -74,11 +57,7 @@ sub getTimeColumn() {
 sub agreggateEventsByTimePeriod {
 	my ($self, $timeperiodList, $start, $end, $liveServiceByTpId, $mode) = @_;
 	my $db = $self->{"centstorage"};
-	my $nbEvents;
 	my $logger = $self->{"logger"};
-	if($logger->{"severity"} eq '0'){
-	  $nbEvents = $self->getNbEvents($start, $end);
-	}
 		
 	my $rangesByTP = ($self->{"timePeriodObj"})->getTimeRangesForPeriodAndTpList($timeperiodList, $start, $end);
 	my $query = "SELECT e.host_id,e.service_id, start_time, end_time, ack_time, state, last_update";
@@ -103,32 +82,6 @@ sub agreggateEventsByTimePeriod {
     my $speed = 0;
 	
 	while (my $row = $sth->fetchrow_hashref()) {
-	
-	  if($logger->{"severity"} eq '0'){
-		$currentTime = time();
-		#Live rebuild statistics
-        if($currentTime - $previousTime >= 5 && $nbEventTreated > 0){ 
-            $speed = ($nbEventTreated-$previousNbEventsTreated)/($currentTime - $previousTime);
-            $previousTime = $currentTime;
-			$previousNbEventsTreated = $nbEventTreated;
-        }
-        
-        #Write every 10sec to a stat file
-        if($currentTime%10==0){
-          open my $fh, ">", '@CENTREON_BI_LOG@etl-stats.log' 
-		  or die "Can't open the following file: $!";
-   		  if($speed > 0){
-   			my $msg = sprintf("[".localtime(time)."] [LIVE] [SERVICE] Events: %d/%d (%.3f events/sec) - Time Remaining : %d min %d sec ( %.2f %% ) \r",$nbEventTreated,$nbEvents, $speed,(($nbEvents-$nbEventTreated)/$speed)/60,(($nbEvents-$nbEventTreated)/$speed)%60,$nbEventTreated*100/$nbEvents);
-   			print $fh $msg;
-          }else{
-   			my $msg = sprintf("[".localtime(time)."] [LIVE] [SERVICE] Events: %d/%d (n/a events/sec)  ( %.2f %% ) \r",$nbEventTreated,$nbEvents, $nbEventTreated*100/$nbEvents);
-  			print $fh $msg;
-   		  }
-		  close($fh);
-        }
-	   }
-		#End
-			
 		if (!defined($row->{'end_time'})) {
 			$row->{'end_time'} = $end;
 		}
@@ -149,7 +102,7 @@ sub agreggateEventsByTimePeriod {
 				$serviceEventObjects->bindParam(\@tab);
 			}
 		}
-		
+
 		$nbEventTreated++;
 	}
 	($db->getInstance)->commit;

@@ -24,24 +24,24 @@ use warnings;
 package gorgone::modules::centreon::mbi::libs::Messages;
 
 sub new {
-	my $class = shift;
-	my $self  = {};
+    my $class = shift;
+    my $self  = {};
 
     $self->{messages} = [];
 
-	bless $self, $class;
-	return $self;
+    bless $self, $class;
+    return $self;
 }
 
 sub writeLog {
     my ($self, $severity, $message, $nodie) = @_;
 
-	$severity = lc($severity);
+    $severity = lc($severity);
 
-	my %severities = ('debug' => 'D', 'info' => 'I', 'warning' => 'I', 'error' => 'E', 'fatal' => 'F');
-	if ($severities{$severity} eq 'E' || $severities{$severity} eq 'F') {
+    my %severities = ('debug' => 'D', 'info' => 'I', 'warning' => 'I', 'error' => 'E', 'fatal' => 'F');
+    if ($severities{$severity} eq 'E' || $severities{$severity} eq 'F') {
         die $message if (!defined($nodie) || $nodie == 0);
-	}
+    }
 
     push @{$self->{messages}}, [$severities{$severity}, $message];
 }

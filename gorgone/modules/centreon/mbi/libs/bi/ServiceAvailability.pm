@@ -89,12 +89,11 @@ sub insertStats {
 
 	my $sth = $db->prepare($query);	
 	my $inst = $db->getInstance;
-	$inst->begin_work;
 	my $counter = 0;
 	
 	while (my ($modBiServiceId, $stats) = each %$data) {
 		my @tab = @$stats;
-		if ($stats->[0]+$stats->[1]+$stats->[4] == 0) {
+		if ($stats->[0] + $stats->[1] + $stats->[4] == 0) {
 			next;
 		}
 		my $j = 1;
@@ -111,15 +110,9 @@ sub insertStats {
 
 		if ($counter >= $commitParam) {
 			$counter = 0;
-			$inst->commit;
-			if (defined($inst->errstr)) {
-	  			$logger->writeLog("FATAL", $self->{'name'}." insertion commit error : ".$inst->errstr);
-			}
-			$inst->begin_work;
 		}
 		$counter++;
 	}
-	$inst->commit;
 }
 
 sub getCurrentNbLines{

@@ -144,7 +144,7 @@ sub action_centreonmbietlworkersimport {
         }
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;
-        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
+        $self->{messages}->writeLog('ERROR', $_, 1);
     };
 
     $self->send_log(
@@ -208,13 +208,26 @@ sub action_centreonmbietlworkersevent {
         if ($options{data}->{content}->{params}->{type} eq 'sql') {
             gorgone::modules::centreon::mbi::etlworkers::event::main::sql($self, params => $options{data}->{content}->{params});
         } elsif ($options{data}->{content}->{params}->{type} eq 'events') {
-            gorgone::modules::centreon::mbi::etlworkers::event::main::events($self, params => $options{data}->{content}->{params});
+            gorgone::modules::centreon::mbi::etlworkers::event::main::events(
+                $self,
+                dbmon => $options{data}->{content}->{dbmon},
+                dbbi => $options{data}->{content}->{dbbi},
+                etlProperties => $options{data}->{content}->{etlProperties},
+                params => $options{data}->{content}->{params},
+                options => $options{data}->{content}->{options}
+            );
         } elsif ($options{data}->{content}->{params}->{type} =~ /^availability_/) {
-            gorgone::modules::centreon::mbi::etlworkers::event::main::availability($self, params => $options{data}->{content}->{params});
+            gorgone::modules::centreon::mbi::etlworkers::event::main::availability(
+                $self,
+                dbmon => $options{data}->{content}->{dbmon},
+                dbbi => $options{data}->{content}->{dbbi},
+                etlProperties => $options{data}->{content}->{etlProperties},
+                params => $options{data}->{content}->{params}
+            );
         }
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;
-        $self->{messages}->writeLog('ERROR', $_, nodie => 1);
+        $self->{messages}->writeLog('ERROR', $_, 1);
     };
 
     $self->send_log(

@@ -171,7 +171,7 @@ sub getRangePartitionDate {
     }
 
     my $partitions = [];
-    while ($epoch <= $epoch_end) {
+    while ($epoch < $epoch_end) {
         $dt1->add(days => 1);
 
         $epoch = $dt1->epoch();

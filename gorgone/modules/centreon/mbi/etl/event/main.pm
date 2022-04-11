@@ -66,7 +66,7 @@ sub emptyTableForRebuild {
     }
 
     push @$sql,
-        [ '[CREATE] Add table [' . $options{start} . ']', $structure ],
+        [ '[CREATE] Add table [' . $options{name} . ']', $structure ],
         [ "[INDEXING] Adding index [idx_$options{name}_$options{column}] on table [$options{name}]", "ALTER TABLE `$options{name}` ADD INDEX `idx_$options{name}_$options{column}` (`$options{column}`)" ];
 
     push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, { type => 'sql', db => 'centstorage', sql => $sql };
@@ -217,7 +217,7 @@ sub dailyProcessing {
         processHostgroupAvailability($etl, $utils->subtractDateMonths($end, 1), $utils->subtractDateDays($end, 1));
     }
 
-    push @{$etl->{run}->{schedule}->{event}->{stages}->[1]},
+    push @{$etl->{run}->{schedule}->{event}->{stages}->[0]},
         { type => 'events', services => 1, start => $start, end => $end }, { type => 'events', hosts => 1, start => $start, end => $end };
 }
 
@@ -259,7 +259,7 @@ sub rebuildProcessing {
     }
 
     if (!defined($etl->{run}->{options}->{availability_only}) || $etl->{run}->{options}->{availability_only} == 0) {
-        push @{$etl->{run}->{schedule}->{event}->{stages}->[1]},
+        push @{$etl->{run}->{schedule}->{event}->{stages}->[0]},
             { type => 'events', services => 1, start => $start, end => $end }, { type => 'events', hosts => 1, start => $start, end => $end };
     }
 }

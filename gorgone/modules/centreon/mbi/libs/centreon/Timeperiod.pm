@@ -13,7 +13,7 @@
 use strict;
 use warnings;
 use Time::Local;
-require gorgone::modules::centreon::mbi::libs::Utils;
+use gorgone::modules::centreon::mbi::libs::Utils;
  
 package gorgone::modules::centreon::mbi::libs::centreon::Timeperiod;
 
@@ -136,7 +136,7 @@ sub getTimeRangesForPeriod {
 	my ($timeperiodId, $start, $end) = @_;
    	my @results = ();
    	my @weekDays = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday");
-   	my $days = Utils->getRebuildPeriods($start, $end);
+   	my $days = gorgone::modules::centreon::mbi::libs::Utils->getRebuildPeriods($start, $end);
    	my $weekRanges = $self->getAllRangesForTpId($timeperiodId);
    	foreach (@$days) {
    		my $dayStart = $_->{'start'};

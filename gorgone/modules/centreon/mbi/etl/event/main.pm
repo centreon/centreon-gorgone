@@ -69,7 +69,7 @@ sub emptyTableForRebuild {
         [ '[CREATE] Add table [' . $options{start} . ']', $structure ],
         [ "[INDEXING] Adding index [idx_$options{name}_$options{column}] on table [$options{name}]", "ALTER TABLE `$options{name}` ADD INDEX `idx_$options{name}_$options{column}` (`$options{column}`)" ];
 
-    push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, { type => 'sql', sql => $sql };
+    push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, { type => 'sql', db => 'centstorage', sql => $sql };
 }
 
 sub deleteEntriesForRebuild {
@@ -95,7 +95,7 @@ sub deleteEntriesForRebuild {
         }
 	}
 
-    push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, { type => 'sql', sql => $sql };
+    push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, { type => 'sql', db => 'centstorage', sql => $sql };
 }
 
 sub purgeAvailabilityTables {
@@ -193,6 +193,7 @@ sub dailyProcessing {
     my ($epoch, $partName) = $utils->getDateEpoch($end);
     push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, {
         type => 'sql',
+        db => 'centstorage',
         sql => [
             '[PARTITIONS] Add partition [p' . $partName . '] on table [mod_bi_hostavailability]',
             "ALTER TABLE `mod_bi_hostavailability` ADD PARTITION (PARTITION `p$partName` VALUES LESS THAN(" . $epoch . "))"
@@ -200,6 +201,7 @@ sub dailyProcessing {
     };
     push @{$etl->{run}->{schedule}->{event}->{stages}->[0]}, {
         type => 'sql',
+        db => 'centstorage',
         sql => [
             '[PARTITIONS] Add partition [p' . $partName . '] on table [mod_bi_serviceavailability]',
             "ALTER TABLE `mod_bi_serviceavailability` ADD PARTITION (PARTITION `p$partName` VALUES LESS THAN(" . $epoch . "))"

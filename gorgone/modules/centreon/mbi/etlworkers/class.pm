@@ -202,14 +202,15 @@ sub action_centreonmbietlworkersevent {
 
     try {
         $self->db_connections(
+            dbmon => $options{data}->{content}->{dbmon},
             dbbi => $options{data}->{content}->{dbbi}
         );
         if ($options{data}->{content}->{params}->{type} eq 'sql') {
             gorgone::modules::centreon::mbi::etlworkers::event::main::sql($self, params => $options{data}->{content}->{params});
         } elsif ($options{data}->{content}->{params}->{type} eq 'events') {
-            gorgone::modules::centreon::mbi::etlworkers::import::main::events($self, params => $options{data}->{content}->{params});
+            gorgone::modules::centreon::mbi::etlworkers::event::main::events($self, params => $options{data}->{content}->{params});
         } elsif ($options{data}->{content}->{params}->{type} =~ /^availability_/) {
-            gorgone::modules::centreon::mbi::etlworkers::import::main::availability($self, params => $options{data}->{content}->{params});
+            gorgone::modules::centreon::mbi::etlworkers::event::main::availability($self, params => $options{data}->{content}->{params});
         }
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;

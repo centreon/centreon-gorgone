@@ -237,7 +237,9 @@ sub watch_etl_event {
                 $self->execute_action(
                     action => 'CENTREONMBIETLWORKERSEVENT',
                     substep => "event-$stage-$idx",
-                    params => %{$self->{run}->{schedule}->{event}->{stages}->[$stage]->[$idx]}
+                    etlProperties => 1,
+                    options => 1,
+                    params => $self->{run}->{schedule}->{event}->{stages}->[$stage]->[$idx]
                 );
                 $self->{run}->{schedule}->{event}->{stages}->[$stage]->[$idx]->{status} = RUNNING;
             } elsif ($val->{status} == FINISHED) {

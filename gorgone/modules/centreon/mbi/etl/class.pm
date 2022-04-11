@@ -346,8 +346,6 @@ sub run_etl_event {
         scalar(@{$self->{run}->{schedule}->{event}->{stages}->[0]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[1]}) + scalar(@{$self->{run}->{schedule}->{event}->{stages}->[2]});
 
     $self->{logger}->writeLogDebug("[mbi-etl] event substeps " . $self->{run}->{schedule}->{event}->{substeps_total});
-
-    use Data::Dumper; print Data::Dumper::Dumper($self->{run}->{schedule}->{event});
 }
 
 sub run_etl_perfdata {

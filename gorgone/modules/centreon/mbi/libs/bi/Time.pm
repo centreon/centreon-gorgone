@@ -50,11 +50,11 @@ sub getEntriesDtime {
 	my $query = "SELECT date_format('%Y-%m-%d', dtime) as dtime";
 	$query .= " FROM `mod_bi_time`";
 	$query .= " WHERE dtime >= '".$start."' AND dtime <'".$end."'";
-	
+
 	my $sth = $db->query($query);
 	my @results = ();
 	if (my $row = $sth->fetchrow_hashref()) {
-		push @results, $row->{'dtime'};
+		push @results, $row->{dtime};
 	}
 	$sth->finish();
 	return (@results);
@@ -223,7 +223,7 @@ sub getTotalDaysInPeriod {
 	my $db = $self->{"centstorage"};
 	my $logger = $self->{"logger"};
 	my ($start, $end) = @_;
-	
+
 	my $query = "SELECT DATEDIFF('".$end."', '".$start."') diff";
 	my $sth = $db->query($query);
 	my $diff;

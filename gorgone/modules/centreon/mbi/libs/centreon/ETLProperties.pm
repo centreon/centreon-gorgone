@@ -105,11 +105,11 @@ sub getRetentionPeriods {
     $query .= " opt_key ";
     $query .= " FROM `mod_bi_options` ";
     $query .= " WHERE `opt_key` like ('etl.retention.%')";
-    my $sth = $self->{"centreon"}->query($query);
+    my $sth = $self->{centreon}->query($query);
     my %periods = ();
     while (my $row = $sth->fetchrow_hashref()) {
         $row->{'opt_key'} =~ s/etl.retention.//; 
-        $periods{$row->{'opt_key'}} = {'start' => $row->{'period_start'}, 'end' => $row->{'period_end'}} ;
+        $periods{$row->{'opt_key'}} = { start => $row->{period_start}, end => $row->{period_end}} ;
     }
     if (!scalar(keys %periods)){
         $logger->writeLog("FATAL", "Cannot retention periods information. Verify your data retention options");

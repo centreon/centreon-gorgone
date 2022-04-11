@@ -212,7 +212,7 @@ sub dailyProcessing {
     # Calculating statistics for last month if day of month si 1
     my ($year, $mon, $day) = split('-', $end);
     if ($day == 1) {
-        processHostgroupAvailability($utils->subtractDateMonths($end, 1), $utils->subtractDateDays($end, 1));
+        processHostgroupAvailability($etl, $utils->subtractDateMonths($end, 1), $utils->subtractDateDays($end, 1));
     }
 
     push @{$etl->{run}->{schedule}->{event}->{stages}->[1]},
@@ -230,7 +230,7 @@ sub rebuildAvailability {
 
         my ($year, $mon, $day) = split('-', $end);
         if ($day == 1) {
-            processHostgroupAvailability($utils->subtractDateMonths($end, 1), $utils->subtractDateDays($end, 1));
+            processHostgroupAvailability($etl, $utils->subtractDateMonths($end, 1), $utils->subtractDateDays($end, 1));
         }
 
         $start = $end;

@@ -85,7 +85,7 @@ sub copyLiveServicesToMonitoringDB {
 sub truncateDimensionTables {
     my ($etlwk, %options) = @_;
     
-    if (defined($options{options}->{rebuild}) && !defined($options{options}->{nopurge})) {
+    if ($options{options}->{rebuild} == 1 && $options{options}->{nopurge} == 0) {
         $biHostgroup->truncateTable();
         $biHostcategory->truncateTable();
         $biServicecategory->truncateTable();
@@ -135,7 +135,7 @@ sub denormalizeDimensionsFromCentreon {
     my $hostRows = $biHost->getHostsInfo();
     my $serviceRows = $service->getServicesWithHostAndCategory($hostRows);
     $etlwk->{messages}->writeLog("INFO", "Updating service dimension in Centstorage");
-    if (defined($options{options}->{rebuild}) && !defined($options{options}->{nopurge})) {
+    if ($options{options}->{rebuild} == 1 && $options{options}->{nopurge} == 0) {
         $biService->insert($serviceRows);
     } else {
         $biService->update($serviceRows, $options{etlProperties}->{'tmp.storage.memory'});
@@ -143,7 +143,7 @@ sub denormalizeDimensionsFromCentreon {
 
     if (!defined($options{etlProperties}->{'statistics.type'}) || $options{etlProperties}->{'statistics.type'} ne 'availability') {
         $etlwk->{messages}->writeLog("INFO", "Updating metric dimension in Centstorage");
-        if (defined($options{options}->{rebuild}) && !defined($options{options}->{nopurge})) {
+        if ($options{options}->{rebuild} == 1 && $options{options}->{nopurge} == 0) {
             $biMetric->insert();
         } else {
             $biMetric->update($options{etlProperties}->{'tmp.storage.memory'});
@@ -184,7 +184,7 @@ sub insertCentileParamToBIStorage{
     $liveService->insertList($timeperiods);
 
     #In case of rebuild, delete all centile parameters
-    if (defined($options{options}->{rebuild})){
+    if ($options{options}->{rebuild} == 1){
         $etlwk->{dbbi_centstorage_con}->query("TRUNCATE TABLE mod_bi_centiles");
     }
     $sth = $etlwk->{dbbi_centreon_con}->query("select * from mod_bi_options_centiles");
@@ -249,7 +249,7 @@ sub execute {
     initVars($etlwk, %options);
 
     $biDataQuality->searchAndDeleteDuplicateEntries();
-    if (!defined($options{options}->{centile})) {
+    if (!defined($options{options}->{centile}) || $options{options}->{centile} == 0) {
         truncateDimensionTables($etlwk, %options);
         denormalizeDimensionsFromCentreon($etlwk, %options);
         copyLiveServicesToMonitoringDB($etlwk, %options);

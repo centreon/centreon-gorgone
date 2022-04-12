@@ -108,6 +108,7 @@ rm -rf %{buildroot}
 %dir %{_sysconfdir}/centreon-gorgone/config.d
 %dir %{_sysconfdir}/centreon-gorgone/config.d/cron.d
 %{_sysconfdir}/centreon-gorgone/config.yaml
+%defattr(-, centreon-gorgone, centreon-gorgone, -)
 %{_localstatedir}/lib/centreon-gorgone
 %{_localstatedir}/log/centreon-gorgone
 %{_localstatedir}/cache/centreon-gorgone

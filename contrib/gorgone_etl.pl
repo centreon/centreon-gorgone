@@ -46,6 +46,7 @@ sub new {
 
     # importData: bam_only
     # dimensions: centile
+    # perfdata: centile_only, month_only, no_centile
 
     $self->add_options(
         'url:s' => \$self->{url},

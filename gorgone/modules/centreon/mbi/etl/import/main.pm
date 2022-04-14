@@ -259,21 +259,6 @@ sub dataBin {
             push @{$action->{actions}}, { type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
         }
 
-=pod
-        my $epoch2 = $utils->getDateEpoch($periods->{raw_perfdata}->{end});
-
-        my $cmd = sprintf(
-            "mysqldump --insert-ignore --single-transaction --no-create-info --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql --init-command='SET SESSION unique_checks=0' %s '%s'",
-            $argsMon,
-            $etl->{run}->{dbmon}->{centstorage}->{db},
-            'data_bin',
-            'ctime >= ' . $epoch .  ' AND ctime < ' . $epoch2,
-            $argsBi,
-            $etl->{run}->{dbbi}->{centstorage}->{db}
-        );
-        push @{$action->{actions}}, { type => 2, message => '[LOAD] load table [data_bin]', command => $cmd };
-=cut
-
         #my $file = $etlProperties->{'reporting.storage.directory'} . '/data_bin.sql';
         #push @{$action->{actions}}, {
         #    type => 3,

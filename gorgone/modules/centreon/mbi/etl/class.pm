@@ -35,6 +35,7 @@ use JSON::XS;
 use gorgone::modules::centreon::mbi::libs::Messages;
 use gorgone::modules::centreon::mbi::etl::import::main;
 use gorgone::modules::centreon::mbi::etl::event::main;
+use gorgone::modules::centreon::mbi::etl::perfdata::main;
 use gorgone::modules::centreon::mbi::libs::centreon::ETLProperties;
 use Try::Tiny;
 
@@ -214,7 +215,7 @@ sub watch_etl_event {
     my ($self, %options) = @_;
 
     if (defined($options{indexes})) {
-        $self->{run}->{schedule}->{import}->{substeps_executed}++;
+        $self->{run}->{schedule}->{event}->{substeps_executed}++;
         my ($idx, $idx2) = split(/-/, $options{indexes});
         $self->{run}->{schedule}->{event}->{stages}->[$idx]->[$idx2]->{status} = FINISHED;
     }
@@ -250,6 +251,52 @@ sub watch_etl_event {
         if ($stage_finished >= scalar(@{$self->{run}->{schedule}->{event}->{stages}->[$stage]})) {
             $self->{run}->{schedule}->{event}->{current_stage}++;
             $stage = $self->{run}->{schedule}->{event}->{current_stage};
+        } else {
+            last;
+        }
+    }
+}
+
+sub watch_etl_perfdata {
+    my ($self, %options) = @_;
+
+    if (defined($options{indexes})) {
+        $self->{run}->{schedule}->{perfdata}->{substeps_executed}++;
+        my ($idx, $idx2) = split(/-/, $options{indexes});
+        $self->{run}->{schedule}->{perfdata}->{stages}->[$idx]->[$idx2]->{status} = FINISHED;
+    }
+
+    return if (!$self->check_stopped());
+
+    if ($self->{run}->{schedule}->{perfdata}->{substeps_executed} >= $self->{run}->{schedule}->{perfdata}->{substeps_total}) {
+        $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] finished'] ] });
+        $self->{run}->{schedule}->{perfdata}->{status} = FINISHED;
+        return ;
+    }
+
+    my $stage = $self->{run}->{schedule}->{perfdata}->{current_stage};
+    my $stage_finished = 0;
+    while ($stage <= 2) {
+        while (my ($idx, $val) = each(@{$self->{run}->{schedule}->{perfdata}->{stages}->[$stage]})) {
+            if (!defined($val->{status})) {
+                $self->{logger}->writeLogDebug("[mbi-etl] execute substep perfdata-$stage-$idx");
+                $self->{run}->{schedule}->{perfdata}->{substeps_execute}++;
+                $self->execute_action(
+                    action => 'CENTREONMBIETLWORKERSEVENT',
+                    substep => "perfdata-$stage-$idx",
+                    etlProperties => 1,
+                    options => 1,
+                    params => $self->{run}->{schedule}->{perfdata}->{stages}->[$stage]->[$idx]
+                );
+                $self->{run}->{schedule}->{perfdata}->{stages}->[$stage]->[$idx]->{status} = RUNNING;
+            } elsif ($val->{status} == FINISHED) {
+                $stage_finished++;
+            }
+        }
+
+        if ($stage_finished >= scalar(@{$self->{run}->{schedule}->{perfdata}->{stages}->[$stage]})) {
+            $self->{run}->{schedule}->{perfdata}->{current_stage}++;
+            $stage = $self->{run}->{schedule}->{perfdata}->{current_stage};
         } else {
             last;
         }
@@ -398,7 +445,21 @@ sub run_etl_event {
 
 sub run_etl_perfdata {
     my ($self, %options) = @_;
-    
+
+    $self->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] Prepare' ] ] });
+
+    gorgone::modules::centreon::mbi::etl::perfdata::main::prepare($self);
+
+    $self->{run}->{schedule}->{perfdata}->{status} = RUNNING;
+    $self->{run}->{schedule}->{perfdata}->{current_stage} = 0;
+    $self->{run}->{schedule}->{perfdata}->{substeps_execute} = 0;
+    $self->{run}->{schedule}->{perfdata}->{substeps_executed} = 0;
+    $self->{run}->{schedule}->{perfdata}->{substeps_total} = 
+        scalar(@{$self->{run}->{schedule}->{perfdata}->{stages}->[0]}) + scalar(@{$self->{run}->{schedule}->{perfdata}->{stages}->[1]}) + scalar(@{$self->{run}->{schedule}->{perfdata}->{stages}->[2]});
+
+    $self->{logger}->writeLogDebug("[mbi-etl] perfdata substeps " . $self->{run}->{schedule}->{perfdata}->{substeps_total});
+
+    $self->watch_etl_perfdata();
 }
 
 sub run_etl {
@@ -446,7 +507,9 @@ sub check_stopped_event {
 sub check_stopped_perfdata {
     my ($self, %options) = @_;
 
-    return 0;
+    return 0 if ($self->{run}->{schedule}->{perfdata}->{substeps_executed} >= $self->{run}->{schedule}->{perfdata}->{substeps_execute});
+
+    return 1;
 }
 
 sub check_stopped {
@@ -546,7 +609,7 @@ sub action_centreonmbietlrun {
             import => { status => UNPLANNED, actions => [] },
             dimensions => { status => UNPLANNED },
             event => { status => UNPLANNED, stages => [ [], [], [] ] },
-            perfdata => { status => UNPLANNED, actions => [] }
+            perfdata => { status => UNPLANNED, stages => [ [], [], [] ] }
         };
         $self->{run}->{status} = RUNNING;
     
@@ -616,7 +679,7 @@ sub action_centreonmbietllistener {
     } elsif ($type eq 'event') {
         $self->watch_etl_event(indexes => $indexes);
     } elsif ($type eq 'perfdata') {
-        
+        $self->watch_etl_perfdata(indexes => $indexes);
     }
 
     return 1;

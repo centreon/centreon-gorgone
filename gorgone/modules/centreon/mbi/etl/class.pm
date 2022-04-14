@@ -282,7 +282,7 @@ sub watch_etl_perfdata {
                 $self->{logger}->writeLogDebug("[mbi-etl] execute substep perfdata-$stage-$idx");
                 $self->{run}->{schedule}->{perfdata}->{substeps_execute}++;
                 $self->execute_action(
-                    action => 'CENTREONMBIETLWORKERSEVENT',
+                    action => 'CENTREONMBIETLWORKERSPERFDATA',
                     substep => "perfdata-$stage-$idx",
                     etlProperties => 1,
                     options => 1,

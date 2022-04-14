@@ -34,6 +34,7 @@ use Try::Tiny;
 use gorgone::modules::centreon::mbi::etlworkers::import::main;
 use gorgone::modules::centreon::mbi::etlworkers::dimensions::main;
 use gorgone::modules::centreon::mbi::etlworkers::event::main;
+use gorgone::modules::centreon::mbi::etlworkers::perfdata::main;
 use gorgone::modules::centreon::mbi::libs::Messages;
 
 my %handlers = (TERM => {}, HUP => {});
@@ -225,6 +226,55 @@ sub action_centreonmbietlworkersevent {
                 dbbi => $options{data}->{content}->{dbbi},
                 etlProperties => $options{data}->{content}->{etlProperties},
                 params => $options{data}->{content}->{params}
+            );
+        }
+    } catch {
+        $code = GORGONE_ACTION_FINISH_KO;
+        $self->{messages}->writeLog('ERROR', $_, 1);
+    };
+
+    $self->send_log(
+        code => $code,
+        token => $options{token},
+        data => {
+            messages => $self->{messages}->getLogs()
+        }
+    );
+}
+
+sub action_centreonmbietlworkersperfdata {
+    my ($self, %options) = @_;
+
+    $options{token} = $self->generate_token() if (!defined($options{token}));
+
+    $self->{messages} = gorgone::modules::centreon::mbi::libs::Messages->new();
+    my $code = GORGONE_ACTION_FINISH_OK;
+
+    try {
+        $self->db_connections(
+            dbmon => $options{data}->{content}->{dbmon},
+            dbbi => $options{data}->{content}->{dbbi}
+        );
+        if ($options{data}->{content}->{params}->{type} eq 'sql') {
+            gorgone::modules::centreon::mbi::etlworkers::perfdata::main::sql($self, params => $options{data}->{content}->{params});
+        } elsif ($options{data}->{content}->{params}->{type} =~ /^perfdata_/) {
+            gorgone::modules::centreon::mbi::etlworkers::perfdata::main::perfdata(
+                $self,
+                dbmon => $options{data}->{content}->{dbmon},
+                dbbi => $options{data}->{content}->{dbbi},
+                etlProperties => $options{data}->{content}->{etlProperties},
+                params => $options{data}->{content}->{params},
+                options => $options{data}->{content}->{options},
+                pool_id => $self->{pool_id}
+            );
+        } elsif ($options{data}->{content}->{params}->{type} =~ /^centile_/) {
+            gorgone::modules::centreon::mbi::etlworkers::perfdata::main::centile(
+                $self,
+                dbmon => $options{data}->{content}->{dbmon},
+                dbbi => $options{data}->{content}->{dbbi},
+                etlProperties => $options{data}->{content}->{etlProperties},
+                params => $options{data}->{content}->{params},
+                pool_id => $self->{pool_id}
             );
         }
     } catch {

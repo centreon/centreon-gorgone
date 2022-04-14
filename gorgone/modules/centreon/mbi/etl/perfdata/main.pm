@@ -176,7 +176,8 @@ sub purgeTables {
     }
 }
 
-sub processByDay {
+=pod
+OLD sub processByDay {
 	my ($etl, $liveServices, $start, $end) = @_;
 			
    	while (my ($liveserviceName, $liveserviceId) = each (%$liveServices)) {
@@ -201,8 +202,10 @@ sub processByDay {
         }
    	}
 }
+=cut
 
-sub processHostgroupAvailability {
+=pod
+OLD sub processHostgroupAvailability {
 	my ($etl, $start, $end) = @_;
 
 	$time->insertTimeEntriesForPeriod($start, $end);
@@ -220,6 +223,126 @@ sub processHostgroupAvailability {
             end => $end
         };
 	}
+}
+=cut
+
+sub processDay {
+    my ($etl, $liveServices, $start, $end) = @_;
+
+    if ($etl->{run}->{etlProperties}->{'perfdata.granularity'} eq 'hour' || 
+        (defined($etl->{run}->{options}->{month_only}) && $etl->{run}->{options}->{month_only} == 1)) {
+        return 1;
+    }
+
+    my ($currentDayId, $currentDayUtime) = $time->getEntryID($start);
+
+    if ((!defined($etl->{run}->{options}->{centile_only}) || $etl->{run}->{options}->{centile_only} == 0)) {
+        while (my ($liveServiceName, $liveServiceId) = each (%$liveServices)) {
+            push @{$etl->{run}->{schedule}->{event}->{stages}->[1]}, {
+                type => 'perfdata_day',
+                liveserviceName => $liveserviceName,
+                liveserviceId => $liveserviceId,
+                start => $start,
+                end => $end
+            };
+        }
+    }
+
+    if ((!defined($etl->{run}->{options}->{no_centile}) || $etl->{run}->{options}->{no_centile} == 0)) {
+        if (defined($etl->{run}->{etlProperties}->{'centile.include.servicecategories'}) && $etl->{run}->{etlProperties}->{'centile.include.servicecategories'} ne '') {
+            if (defined($etl->{run}->{etlProperties}->{'centile.day'}) && $etl->{run}->{etlProperties}->{'centile.day'} eq '1') {
+                push @{$etl->{run}->{schedule}->{event}->{stages}->[2]}, {
+                    type => 'centile_day',
+                    start => $start,
+                    end => $end
+                };
+            }
+            if (defined($etl->{run}->{etlProperties}->{'centile.week'}) && $etl->{run}->{etlProperties}->{'centile.week'} eq '1') {
+                if ($utils->getDayOfWeek($end) eq $etlProperties->{'centile.weekFirstDay'}) {
+                    processWeek($etl, $end);
+                }
+            }
+        }
+    }
+}
+
+sub processWeek {
+    my ($etl, $date) = @_;
+
+    my $start = $utils->subtractDateWeeks($date, 1);
+    my $end = $utils->subtractDateDays($date, 1)
+
+    $time->insertTimeEntriesForPeriod($start, $end);
+
+    push @{$etl->{run}->{schedule}->{event}->{stages}->[2]}, {
+        type => 'centile_week',
+        start => $start,
+        end => $end
+    };
+}
+
+sub processMonth {
+    my ($etl, $liveServices, $date) = @_;
+
+    my $start = $utils->subtractDateMonths($date, 1);
+    my $end = $utils->subtractDateDays($date, 1);
+
+    $time->insertTimeEntriesForPeriod($start, $end);
+
+    my ($previousMonthStartTimeId, $previousMonthStartUtime) = $time->getEntryID($start);
+    my ($previousMonthEndTimeId, $previousMonthEndUtime) = $time->getEntryID($end);    
+
+    if (!defined($etl->{run}->{etlProperties}->{'capacity.include.servicecategories'}) || $etl->{run}->{etlProperties}->{'capacity.include.servicecategories'} eq ""
+        || !defined($etl->{run}->{etlProperties}->{'capacity.include.liveservices'}) || $etl->{run}->{etlProperties}->{'capacity.include.liveservices'} eq "") {
+        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', "[SCHEDULER][PERFDATA] Skipping month: [" . $start . "] to [" . $end . "]" ] ] });
+        return ;
+    }
+
+    if ((!defined($etl->{run}->{options}->{centile_only}) || $etl->{run}->{options}->{centile_only} == 0) &&
+        $etl->{run}->{etlProperties}->{'perfdata.granularity'} ne 'hour') {
+        push @{$etl->{run}->{schedule}->{event}->{stages}->[2]}, {
+            type => 'perfdata_month',
+            start => $start,
+            end => $end
+        };
+    }
+
+    if ((!defined($etl->{run}->{options}->{no_centile}) || $etl->{run}->{options}->{no_centile} == 0) && 
+        $etl->{run}->{etlProperties}->{'centile.month'} && $etl->{run}->{etlProperties}->{'perfdata.granularity'} ne 'hour') {
+        if (defined($etl->{run}->{etlProperties}->{'centile.include.servicecategories'}) && $etl->{run}->{etlProperties}->{'centile.include.servicecategories'} ne '') {
+            push @{$etl->{run}->{schedule}->{event}->{stages}->[2]}, {
+                type => 'centile_month',
+                start => $start,
+                end => $end
+            };
+        }
+    }
+}
+
+sub processHours {
+     my ($etl, $start, $end) = @_;
+    
+    if ($etl->{run}->{etlProperties}->{'perfdata.granularity'} eq 'day' || 
+        (defined($etl->{run}->{options}->{month_only}) && $etl->{run}->{options}->{month_only} == 1) || 
+        (defined($etl->{run}->{options}->{centile_only}) && $etl->{run}->{options}->{centile_only} == 1)) {
+        return 1;
+    }
+
+    push @{$etl->{run}->{schedule}->{event}->{stages}->[2]}, {
+        type => 'perfdata_hour',
+        start => $start,
+        end => $end
+    };
+}
+
+sub processDayAndMonthAgregation {
+    my ($etl, $liveServices, $start, $end) = @_;
+
+    processDay($etl, $liveServices, $start, $end);
+    my ($year, $mon, $day) = split ("-", $end);
+    if ($day == 1) {
+        processMonth($etl, $liveServices, $end);
+    }
 }
 
 sub dailyProcessing {

@@ -1,14 +1,22 @@
-##################################################
-# CENTREON
+# 
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-# Source Copyright 2005 - 2015 CENTREON
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
 #
-# Unauthorized reproduction, copy and distribution
-# are not allowed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# For more informations : contact@centreon.com
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-##################################################
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 use strict;
 use warnings;
@@ -47,44 +55,38 @@ sub getTimeColumn() {
 
 sub insertStats {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger =  $self->{"logger"};
 	my ($time_id, $data) = @_;
+    my $insertParam = 1000;
 
-	my $query = "INSERT INTO `".$self->{'name'}."`".
-				" (`time_id`, `modbihg_id`, `modbihc_id`, `liveservice_id`, `available`, `unavailable_time`,".
-				" `alert_unavailable_opened`, `alert_unavailable_closed`, ".
-				" `alert_unreachable_opened`, `alert_unreachable_closed`,".
-				" `alert_unavailable_total`, `alert_unreachable_total`,".
-				" `mtrs`, `mtbf`, `mtbsi`)".
-				" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-	my $sth = $db->prepare($query);
-	my $inst = $db->getInstance;
-	$inst->begin_work;
+	my $query_start = "INSERT INTO `".$self->{'name'}."`".
+        " (`time_id`, `modbihg_id`, `modbihc_id`, `liveservice_id`, `available`, `unavailable_time`,".
+        " `alert_unavailable_opened`, `alert_unavailable_closed`, ".
+        " `alert_unreachable_opened`, `alert_unreachable_closed`,".
+        " `alert_unavailable_total`, `alert_unreachable_total`,".
+        " `mtrs`, `mtbf`, `mtbsi`)".
+        " VALUES ";
 	my $counter = 0;
+    my $query = $query_start;
+    my $append = '';
 	
-	foreach (@$data) {
-		my $entry = $_;
+	foreach my $entry (@$data) {
 		my $size = scalar(@$entry);
-		$sth->bind_param(1, $time_id);
+        $query .= $append . "($time_id";
 		for (my $i = 0; $i < $size; $i++) {
-			$sth->bind_param($i + 2, $entry->[$i]);
+            $query .= ', ' . (defined($entry->[$i]) ? $entry->[$i] : 'NULL');
 		}
-		$sth->execute;
-		if (defined($inst->errstr)) {
-	  		$logger->writeLog("FATAL", $self->{'name'}." insertion execute error : ".$inst->errstr);
-		}
-		if ($counter >= 1000) {
-			$counter = 0;
-			$inst->commit;
-			if (defined($inst->errstr)) {
-	  			$logger->writeLog("FATAL", $self->{'name'}." insertion commit error : ".$inst->errstr);
-			}
-			$inst->begin_work;
-		}
+        $query .= ')';
+
+		$append = ',';
 		$counter++;
+        if ($counter >= $insertParam) {
+            $self->{centstorage}->query($query);
+            $query = $query_start;
+			$counter = 0;
+            $append = '';
+		}
 	}
-	$inst->commit;
+    $self->{centstorage}->query($query) if ($counter > 0);
 }
 
 1;

@@ -76,50 +76,39 @@ sub saveStatsInFile {
 
 sub insertStats {
 	my $self = shift;
-	my $db = $self->{"centstorage"};
-	my $logger =  $self->{"logger"};
 	my ($data, $time_id, $liveserviceId) = @_;
-	my $commitParam = 25000;
-	my $query = "INSERT INTO `".$self->{'name'}."`".
-				" (`modbiservice_id`, `time_id`, `liveservice_id`, `available`, ".
-				" `unavailable`, `degraded`, `alert_unavailable_opened`, `alert_unavailable_closed`, ".
-				" `alert_degraded_opened`, `alert_degraded_closed`, ".
-				" `alert_other_opened`, `alert_other_closed`)".
-				" VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
+	my $insertParam = 10000;
+	my $query_start = "INSERT INTO `" . $self->{name} . "`".
+        " (`modbiservice_id`, `time_id`, `liveservice_id`, `available`, ".
+        " `unavailable`, `degraded`, `alert_unavailable_opened`, `alert_unavailable_closed`, ".
+        " `alert_degraded_opened`, `alert_degraded_closed`, ".
+        " `alert_other_opened`, `alert_other_closed`)".
+        " VALUES ";
 
-	my $sth = $db->prepare($query);	
-	my $inst = $db->getInstance;
-	$inst->begin_work;
 	my $counter = 0;
-	
+    my $query = $query_start;
+    my $append = '';
 	while (my ($modBiServiceId, $stats) = each %$data) {
 		my @tab = @$stats;
-		if ($stats->[0]+$stats->[1]+$stats->[4] == 0) {
+		if ($stats->[0] + $stats->[1] + $stats->[4] == 0) {
 			next;
 		}
-		my $j = 1;
-		$sth->bind_param($j++, $modBiServiceId);
-		$sth->bind_param($j++, $time_id);
-		$sth->bind_param($j++, $liveserviceId);
+        $query .= $append . "($modBiServiceId, $time_id, $liveserviceId";
 		for (my $i = 0; $i < scalar(@$stats); $i++) {
-			$sth->bind_param($i + $j, $stats->[$i]);
+			$query .= ', ' . $stats->[$i];
 		}
-		$sth->execute;
-		if (defined($inst->errstr)) {
-	  		$logger->writeLog("FATAL", $self->{'name'}." insertion execute error : ".$inst->errstr);
-		}
+        $query .= ')';
 
-		if ($counter >= $commitParam) {
-			$counter = 0;
-			$inst->commit();
-			if (defined($inst->errstr)) {
-	  			$logger->writeLog("FATAL", $self->{'name'}." insertion commit error : ".$inst->errstr);
-			}
-			$inst->begin_work();
-		}
+        $append = ',';
 		$counter++;
+        if ($counter >= $insertParam) {
+            $self->{centstorage}->query($query);
+            $query = $query_start;
+			$counter = 0;
+            $append = '';
+		}
 	}
-	$inst->commit();
+	$self->{centstorage}->query($query) if ($counter > 0);
 }
 
 sub getCurrentNbLines{

@@ -242,12 +242,12 @@ sub dataBin {
     }
 
     if ($etl->{run}->{options}->{create_tables} == 0 && ($etlProperties->{'statistics.type'} eq 'all' || $etlProperties->{'statistics.type'} eq 'perfdata')) {
-        my $overCond = '';
-        my $replace = '--replace';
-        $replace = '' if ($drop == 1);
+        my $epoch = $utils->getDateEpoch($periods->{raw_perfdata}->{start});
+
+        my $overCond = 'ctime >= ' . $epoch .  ' AND ';
         foreach (@$partitionsPerf) {
             my $cmd = sprintf(
-                "mysqldump $replace --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql %s '%s'",
+                "mysqldump --insert-ignore --single-transaction --no-create-info --skip-add-drop-table --skip-disable-keys --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql --init-command='SET SESSION unique_checks=0' %s '%s'",
                 $argsMon,
                 $etl->{run}->{dbmon}->{centstorage}->{db},
                 'data_bin',
@@ -258,6 +258,32 @@ sub dataBin {
             $overCond = 'ctime >= ' . $_->{epoch} . ' AND ';
             push @{$action->{actions}}, { type => 2, message => '[LOAD] partition [' . $_->{name} . '] on table [data_bin]', command => $cmd };
         }
+
+=pod
+        my $epoch2 = $utils->getDateEpoch($periods->{raw_perfdata}->{end});
+
+        my $cmd = sprintf(
+            "mysqldump --insert-ignore --single-transaction --no-create-info --skip-add-drop-table --skip-add-locks --skip-comments %s --databases '%s' --tables %s --where=\"%s\" | mysql --init-command='SET SESSION unique_checks=0' %s '%s'",
+            $argsMon,
+            $etl->{run}->{dbmon}->{centstorage}->{db},
+            'data_bin',
+            'ctime >= ' . $epoch .  ' AND ctime < ' . $epoch2,
+            $argsBi,
+            $etl->{run}->{dbbi}->{centstorage}->{db}
+        );
+        push @{$action->{actions}}, { type => 2, message => '[LOAD] load table [data_bin]', command => $cmd };
+=cut
+
+        #my $file = $etlProperties->{'reporting.storage.directory'} . '/data_bin.sql';
+        #push @{$action->{actions}}, {
+        #    type => 3,
+        #    message => '[LOAD] table [data_bin]',
+        #    table => 'data_bin',
+        #    db => 'centstorage',
+        #    dump => $cmd,
+        #    file => $file,
+        #    load => "LOAD DATA LOCAL INFILE '" . $file . "' INTO TABLE `data_bin` CHARACTER SET UTF8 IGNORE 1 LINES"
+        #};
     }
 
     push @{$etl->{run}->{schedule}->{import}->{actions}}, $action;
@@ -348,7 +374,7 @@ sub prepare {
             my ($start, $end) = $etl->{etlProp}->getMaxRetentionPeriodFor('perfdata');
 
             $periods{raw_perfdata} = { start => $start, end => $end };
-            ($start, $end)= $etl->{etlProp}->getMaxRetentionPeriodFor('availability');
+            ($start, $end) = $etl->{etlProp}->getMaxRetentionPeriodFor('availability');
             $periods{raw_availabilitydata} = { start => $start, end => $end};
         } elsif ($etl->{run}->{options}->{start} ne '' && $etl->{run}->{options}->{end} ne '') {
             # set period defined manually

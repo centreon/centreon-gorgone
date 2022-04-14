@@ -23,6 +23,7 @@ package gorgone::modules::centreon::mbi::etlworkers::import::main;
 use strict;
 use warnings;
 use gorgone::standard::misc;
+use File::Basename;
 
 sub sql {
     my ($etlwk, %options) = @_;
@@ -58,6 +59,28 @@ sub command {
 
     $etlwk->{messages}->writeLog('INFO', $options{params}->{message});
     $etlwk->{logger}->writeLogDebug("[mbi-etlworkers] succeeded command (code: $return_code): $stdout");
+}
+
+sub load {
+    my ($etlwk, %options) = @_;
+
+    return if (!defined($options{params}->{file}));
+
+    my ($file, $dir) = File::Basename::fileparse($options{params}->{file});
+
+    if (! -d "$dir" && ! -w "$dir") {
+        $etlwk->{messages}->writeLog('ERROR', "Cannot write into directory " . $dir);
+    }
+
+    command($etlwk, params => { command => $options{params}->{dump}, message => $options{params}->{message} });
+
+    if ($options{params}->{db} eq 'centstorage') {
+        $etlwk->{dbbi_centstorage_con}->query($options{params}->{load});
+    } elsif ($options{params}->{db} eq 'centreon') {
+        $etlwk->{dbbi_centreon_con}->query($options{params}->{load});
+    }
+
+    unlink($options{params}->{file});
 }
 
 1;

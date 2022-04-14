@@ -141,6 +141,8 @@ sub action_centreonmbietlworkersimport {
             gorgone::modules::centreon::mbi::etlworkers::import::main::sql($self, params => $options{data}->{content}->{params});
         } elsif ($options{data}->{content}->{params}->{type} == 2) {
             gorgone::modules::centreon::mbi::etlworkers::import::main::command($self, params => $options{data}->{content}->{params});
+        } elsif ($options{data}->{content}->{params}->{type} == 3) {
+            gorgone::modules::centreon::mbi::etlworkers::import::main::load($self, params => $options{data}->{content}->{params});
         }
     } catch {
         $code = GORGONE_ACTION_FINISH_KO;

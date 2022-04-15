@@ -17,6 +17,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 use strict;
 use warnings;
 
@@ -30,14 +31,20 @@ package gorgone::modules::centreon::mbi::libs::centstorage::Metrics;
 sub new {
     my $class = shift;
     my $self  = {};
-    $self->{"logger"}    = shift;
-    $self->{"centstorage"} = shift;
+    $self->{logger}    = shift;
+    $self->{centstorage} = shift;
+
+    $self->{metrics} = ();
+    $self->{name} = 'data_bin';
+    $self->{timeColumn} = 'ctime';
+    $self->{name_minmaxavg_tmp} = 'mod_bi_tmp_minmaxavgvalue';
+    $self->{name_firstlast_tmp} = 'mod_bi_tmp_firstlastvalues';
+    $self->{name_minmaxctime_tmp} = 'mod_bi_tmp_minmaxctime';
     if (@_) {
-        $self->{"centreon"}  = shift;
+        $self->{name_minmaxavg_tmp} .= $_[0];
+        $self->{name_firstlast_tmp} .= $_[0];
+        $self->{name_minmaxctime_tmp} .= $_[0];
     }
-    $self->{'metrics'} = ();
-    $self->{"name"} = "data_bin";
-    $self->{"timeColumn"} = "ctime";
     bless $self, $class;
     return $self;
 }
@@ -55,8 +62,8 @@ sub getTimeColumn() {
 sub createTempTableMetricMinMaxAvgValues {
     my ($self, $useMemory, $granularity) = @_;
     my $db = $self->{"centstorage"};
-    $db->query("DROP TABLE IF EXISTS `mod_bi_tmp_minmaxavgvalue`");
-    my $createTable = " CREATE TABLE `mod_bi_tmp_minmaxavgvalue` (";
+    $db->query("DROP TABLE IF EXISTS `" . $self->{name_minmaxavg_tmp} . "`");
+    my $createTable = " CREATE TABLE `" . $self->{name_minmaxavg_tmp} . "` (";
     $createTable .= " id_metric INT NULL,";
     $createTable .= " avg_value FLOAT NULL,";
     $createTable .= " min_value FLOAT NULL,";
@@ -82,7 +89,7 @@ sub getMetricValueByHour {
     
     # Getting min, max, average
     $self->createTempTableMetricMinMaxAvgValues($useMemory, "hour");
-    my $query = "INSERT INTO `mod_bi_tmp_minmaxavgvalue` SELECT id_metric, avg(value) as avg_value, min(value) as min_value, max(value) as max_value, ";
+    my $query = "INSERT INTO `" . $self->{name_minmaxavg_tmp} .  "` SELECT id_metric, avg(value) as avg_value, min(value) as min_value, max(value) as max_value, ";
     $query .=     " date_format(FROM_UNIXTIME(ctime), '".$dateFormat."') as valueTime ";
     $query .= "FROM data_bin ";
     $query .= "WHERE ";
@@ -104,7 +111,7 @@ sub getMetricsValueByDay {
     
     # Getting min, max, average
     $self->createTempTableMetricMinMaxAvgValues($useMemory, "day");
-    my $query = "INSERT INTO `mod_bi_tmp_minmaxavgvalue` SELECT id_metric, avg(value) as avg_value, min(value) as min_value, max(value) as max_value ";
+    my $query = "INSERT INTO `" . $self->{name_minmaxavg_tmp} . "` SELECT id_metric, avg(value) as avg_value, min(value) as min_value, max(value) as max_value ";
     #$query .=     " date_format(FROM_UNIXTIME(ctime), '".$dateFormat."') as valueTime ";
     $query .= "FROM data_bin ";
     $query .= "WHERE ";
@@ -134,8 +141,8 @@ sub getMetricsValueByDay {
 sub createTempTableMetricDayFirstLastValues {
     my ($self, $useMemory) = @_;
     my $db = $self->{"centstorage"};
-    $db->query("DROP TABLE IF EXISTS `mod_bi_tmp_firstlastvalues`");
-    my $createTable = " CREATE TABLE `mod_bi_tmp_firstlastvalues` (";
+    $db->query("DROP TABLE IF EXISTS `" . $self->{name_firstlast_tmp} . "`");
+    my $createTable = " CREATE TABLE `" . $self->{name_firstlast_tmp} . "` (";
     $createTable .= " first_value FLOAT NULL,";
     $createTable .= " last_value FLOAT NULL,";
     $createTable .= " id_metric INT NULL";
@@ -150,7 +157,7 @@ sub createTempTableMetricDayFirstLastValues {
 sub addIndexTempTableMetricDayFirstLastValues {
     my $self = shift;
     my $db = $self->{"centstorage"};
-    $db->query("ALTER TABLE mod_bi_tmp_firstlastvalues ADD INDEX (`id_metric`)");
+    $db->query("ALTER TABLE " . $self->{name_firstlast_tmp} . " ADD INDEX (`id_metric`)");
 }
 
 sub addIndexTempTableMetricMinMaxAvgValues {
@@ -161,15 +168,15 @@ sub addIndexTempTableMetricMinMaxAvgValues {
     if ($granularity eq "hour") {
         $index .= ", valueTime";
     }
-    my $query = "ALTER TABLE mod_bi_tmp_minmaxavgvalue ADD INDEX (" . $index . ")";
+    my $query = "ALTER TABLE " . $self->{name_minmaxavg_tmp} . " ADD INDEX (" . $index . ")";
     $db->query($query);
 }
 
 sub createTempTableCtimeMinMaxValues {
     my ($self, $useMemory) = @_;
     my $db = $self->{"centstorage"};
-    $db->query("DROP TABLE IF EXISTS `mod_bi_tmp_minmaxctime`");
-    my $createTable = " CREATE TABLE `mod_bi_tmp_minmaxctime` (";
+    $db->query("DROP TABLE IF EXISTS `" . $self->{name_minmaxctime_tmp} . "`");
+    my $createTable = " CREATE TABLE `" . $self->{name_minmaxctime_tmp} . "` (";
     $createTable .= " min_val INT NULL,";
     $createTable .= " max_val INT NULL,";
     $createTable .= " id_metric INT NULL";
@@ -184,7 +191,7 @@ sub createTempTableCtimeMinMaxValues {
 sub dropTempTableCtimeMinMaxValues {
     my $self = shift;
     my $db = $self->{"centstorage"};
-    $db->query("DROP TABLE `mod_bi_tmp_minmaxctime`");
+    $db->query("DROP TABLE `" . $self->{name_minmaxctime_tmp} . "`");
 }
 
 sub getFirstAndLastValues {
@@ -194,15 +201,15 @@ sub getFirstAndLastValues {
     my ($start_date, $end_date, $useMemory) = @_;
     
     $self->createTempTableCtimeMinMaxValues($useMemory);
-    my $query = "INSERT INTO `mod_bi_tmp_minmaxctime` SELECT min(ctime) as min_val, max(ctime) as max_val, id_metric ";
+    my $query = "INSERT INTO `" . $self->{name_minmaxctime_tmp} . "` SELECT min(ctime) as min_val, max(ctime) as max_val, id_metric ";
     $query .= " FROM `data_bin`";
     $query .= " WHERE ctime >= UNIX_TIMESTAMP(" . $start_date . ") AND ctime < UNIX_TIMESTAMP(" . $end_date . ")";
     $query .= " GROUP BY id_metric";
     $db->query($query);
     
     $self->createTempTableMetricDayFirstLastValues($useMemory);
-    $query = "INSERT INTO mod_bi_tmp_firstlastvalues SELECT d.value as first_value, d2.value as last_value, d.id_metric";
-    $query .= " FROM data_bin as d, data_bin as d2, mod_bi_tmp_minmaxctime as db";
+    $query = "INSERT INTO " . $self->{name_firstlast_tmp} . " SELECT d.value as first_value, d2.value as last_value, d.id_metric";
+    $query .= " FROM data_bin as d, data_bin as d2, " . $self->{name_minmaxctime_tmp} . " as db";
     $query .= " WHERE db.id_metric=d.id_metric AND db.min_val=d.ctime";
     $query .=         " AND db.id_metric=d2.id_metric AND db.max_val=d2.ctime";
     $query .= " GROUP BY db.id_metric";

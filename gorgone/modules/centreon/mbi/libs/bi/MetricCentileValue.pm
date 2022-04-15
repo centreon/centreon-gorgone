@@ -1,14 +1,22 @@
-##################################################
-# CENTREON
+# 
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-# Source Copyright 2005-2014 CENTREON
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
 #
-# Unauthorized reproduction, copy and distribution
-# are not allowed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# For more informations : contact@centreon.com
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-##################################################
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 use strict;
 use warnings;
@@ -27,7 +35,7 @@ sub new {
     $self->{centstorage} = $options{centstorage};
     $self->{centreon}  = $options{centreon};
     $self->{time}  = $options{time};
-    $self->{centileProperties}  = $options{centileProperties};
+    $self->{centileProperties} = $options{centileProperties};
     $self->{timePeriod}  = $options{timePeriod};
     $self->{liveService}  = $options{liveService};
     
@@ -53,8 +61,8 @@ sub getName {
     my $granularity = shift;
     my $name = $self->{name};
     
-    if (defined $granularity && ($granularity eq "month" || $granularity eq "week")) {
-        my $key = "name_".$granularity;
+    if (defined($granularity) && ($granularity eq "month" || $granularity eq "week")) {
+        my $key = 'name_' . $granularity;
         $name = $self->{$key};
     }
     return $name;
@@ -64,7 +72,7 @@ sub getTmpName {
     my ($self, $granularity) = @_;
     my $name = $self->{tmp_name};
     if (defined $granularity && ($granularity eq "month" || $granularity eq "week")) {
-        my $key = "tmp_name_".$granularity;
+        my $key = 'tmp_name_' . $granularity;
         $name = $self->{$key};
     }
     
@@ -130,7 +138,7 @@ sub getTimePeriodQuery {
 sub calcMetricsCentileValueMultipleDays {
     my ($self, %options) = @_;
     
-    my $centileParam =  $self->{centileProperties}->getCentileParams();
+    my $centileParam = $self->{centileProperties}->getCentileParams();
     foreach (@$centileParam) {
         my ($centile, $timeperiodId) = ($_->{centile_param}, $_->{timeperiod_id});
         my ($liveServiceName, $liveServiceId) = $self->{liveService}->getLiveServicesByNameForTpId($timeperiodId);
@@ -159,9 +167,9 @@ sub calcMetricsCentileValueMultipleDays {
             my $row = $sth_centile->fetchrow_arrayref();
             $current++;
             next if (!defined($row));
-            
+
             foreach (@{$options{metricsId}->{$metricId}}) {
-                my $query_insert = 'INSERT INTO '. $self->getName($options{granularity}) . 
+                my $query_insert = 'INSERT INTO ' . $self->getName($options{granularity}) . 
                         '(servicemetric_id, time_id, liveservice_id, centile_value, centile_param, centile_id, total, warning_treshold, critical_treshold)' .
                         "SELECT '" . $_ . "', '" . $options{timeId} . "', '" . $liveServiceId . "', '" . $$row[0] . "', '" . $centile . "', '" . $centileId . "', " . 
                         'm.max, m.warn, m.crit FROM metrics m WHERE m.metric_id = ' . $metricId;

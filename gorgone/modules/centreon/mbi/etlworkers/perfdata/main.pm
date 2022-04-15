@@ -22,44 +22,45 @@ package gorgone::modules::centreon::mbi::etlworkers::perfdata::main;
 
 use strict;
 use warnings;
+
 use gorgone::modules::centreon::mbi::libs::centreon::Timeperiod;
-use gorgone::modules::centreon::mbi::libs::bi::HostAvailability;
-use gorgone::modules::centreon::mbi::libs::bi::ServiceAvailability;
-use gorgone::modules::centreon::mbi::libs::bi::HGMonthAvailability;
-use gorgone::modules::centreon::mbi::libs::bi::HGServiceMonthAvailability;
-use gorgone::modules::centreon::mbi::libs::bi::Time;
-use gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
-use gorgone::modules::centreon::mbi::libs::bi::BIHostStateEvents;
-use gorgone::modules::centreon::mbi::libs::bi::BIServiceStateEvents;
+use gorgone::modules::centreon::mbi::libs::centreon::CentileProperties;
 use gorgone::modules::centreon::mbi::libs::bi::LiveService;
-use gorgone::modules::centreon::mbi::libs::centstorage::HostStateEvents;
-use gorgone::modules::centreon::mbi::libs::centstorage::ServiceStateEvents;
+use gorgone::modules::centreon::mbi::libs::bi::Time;
 use gorgone::modules::centreon::mbi::libs::Utils;
+use gorgone::modules::centreon::mbi::libs::centstorage::Metrics;
+use gorgone::modules::centreon::mbi::libs::bi::MetricDailyValue;
+use gorgone::modules::centreon::mbi::libs::bi::MetricHourlyValue;
+use gorgone::modules::centreon::mbi::libs::bi::MetricCentileValue;
+use gorgone::modules::centreon::mbi::libs::bi::MetricMonthCapacity;
 use gorgone::standard::misc;
 
-my ($utils, $time, $tablesManager, $timePeriod);
-my ($hostAv, $serviceAv);
-my ($hgAv, $hgServiceAv);
-my ($biHostEvents, $biServiceEvents);
-my ($hostEvents, $serviceEvents);
-my ($liveService);
+my ($utils, $time, $timePeriod, $centileProperties, $liveService);
+my ($metrics);
+my ($dayAgregates, $hourAgregates, $centileAgregates, $metricMonthCapacity);
 
 sub initVars {
     my ($etlwk, %options) = @_;
 
-    $utils = gorgone::modules::centreon::mbi::libs::Utils->new($etlwk->{messages});
     $timePeriod = gorgone::modules::centreon::mbi::libs::centreon::Timeperiod->new($etlwk->{messages}, $etlwk->{dbbi_centreon_con});
-    $time = gorgone::modules::centreon::mbi::libs::bi::Time->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-    $tablesManager = gorgone::modules::centreon::mbi::libs::bi::MySQLTables->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-    $biHostEvents = gorgone::modules::centreon::mbi::libs::bi::BIHostStateEvents->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $timePeriod);
-	$biServiceEvents = gorgone::modules::centreon::mbi::libs::bi::BIServiceStateEvents->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $timePeriod);
+    $centileProperties = gorgone::modules::centreon::mbi::libs::centreon::CentileProperties->new($etlwk->{messages}, $etlwk->{dbbi_centreon_con});
     $liveService = gorgone::modules::centreon::mbi::libs::bi::LiveService->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-    $hostEvents = gorgone::modules::centreon::mbi::libs::centstorage::HostStateEvents->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $biHostEvents, $timePeriod);
-	$serviceEvents = gorgone::modules::centreon::mbi::libs::centstorage::ServiceStateEvents->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $biServiceEvents, $timePeriod);
-    $hostAv = gorgone::modules::centreon::mbi::libs::bi::HostAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-	$serviceAv = gorgone::modules::centreon::mbi::libs::bi::ServiceAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-    $hgAv = gorgone::modules::centreon::mbi::libs::bi::HGMonthAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
-	$hgServiceAv = gorgone::modules::centreon::mbi::libs::bi::HGServiceMonthAvailability->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+    $time = gorgone::modules::centreon::mbi::libs::bi::Time->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+    $utils = gorgone::modules::centreon::mbi::libs::Utils->new($etlwk->{messages});
+    $metrics = gorgone::modules::centreon::mbi::libs::centstorage::Metrics->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $options{pool_id});
+    $dayAgregates = gorgone::modules::centreon::mbi::libs::bi::MetricDailyValue->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $options{pool_id});
+    $hourAgregates = gorgone::modules::centreon::mbi::libs::bi::MetricHourlyValue->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con}, $options{pool_id});
+    $metricMonthCapacity = gorgone::modules::centreon::mbi::libs::bi::MetricMonthCapacity->new($etlwk->{messages}, $etlwk->{dbbi_centstorage_con});
+
+    $centileAgregates = gorgone::modules::centreon::mbi::libs::bi::MetricCentileValue->new(
+        logger => $etlwk->{messages},
+        centstorage => $etlwk->{dbbi_centstorage_con},
+        centreon => $etlwk->{dbbi_centreon_con},
+        time => $time,
+        centileProperties => $centileProperties,
+        timePeriod => $timePeriod,
+        liveService => $liveService
+    );
 }
 
 sub sql {
@@ -77,98 +78,112 @@ sub sql {
     }
 }
 
+sub perfdataDay {
+    my ($etlwk, %options) = @_;
+
+    my ($currentDayId, $currentDayUtime) = $time->getEntryID($options{params}->{start});
+    my $ranges = $timePeriod->getTimeRangesForDayByDateTime(
+        $options{params}->{liveserviceName},
+        $options{params}->{start},
+        $utils->getDayOfWeek($options{params}->{start})
+    );
+    if (scalar(@$ranges)) {
+        $etlwk->{messages}->writeLog("INFO", "[PERFDATA] Processing day: $options{params}->{start} => $options{params}->{end} [$options{params}->{liveserviceName}]");
+        $metrics->getMetricsValueByDay($ranges, $options{etlProperties}->{'tmp.storage.memory'});
+        $dayAgregates->insertValues($options{params}->{liveserviceId}, $currentDayId);
+    }    
+}
+
+sub perfdataMonth {
+    my ($etlwk, %options) = @_;
+
+    my ($previousMonthStartTimeId, $previousMonthStartUtime) = $time->getEntryID($options{params}->{start});
+    my ($previousMonthEndTimeId, $previousMonthEndUtime) = $time->getEntryID($options{params}->{end});
+
+    $etlwk->{messages}->writeLog("INFO", "[PERFDATA] Processing month: $options{params}->{start} => $options{params}->{end}");
+    my $data = $dayAgregates->getMetricCapacityValuesOnPeriod($previousMonthStartTimeId, $previousMonthEndTimeId, $options{etlProperties});
+    $metricMonthCapacity->insertStats($previousMonthStartTimeId, $data);
+}
+
+sub perfdataHour {
+    my ($etlwk, %options) = @_;
+
+    $etlwk->{messages}->writeLog("INFO", "[PERFDATA] Processing hours: $options{params}->{start} => $options{params}->{end}");
+
+    $metrics->getMetricValueByHour($options{params}->{start}, $options{params}->{end}, $options{etlProperties}->{'tmp.storage.memory'});
+    $hourAgregates->insertValues();
+}
+
 sub perfdata {
     my ($etlwk, %options) = @_;
 
     initVars($etlwk, %options);
 
-    my ($startTimeId, $startUtime) = $time->getEntryID($options{params}->{start});
-    my ($endTimeId, $endUtime) = $time->getEntryID($options{params}->{end});
-
-    my $liveServices = $liveService->getLiveServicesByTpId();
-
-    if (defined($options{params}->{hosts}) && $options{params}->{hosts} == 1) {
-        processEventsHosts($etlwk, start => $startUtime, end => $endUtime, liveServices => $liveServices, %options);
-    } elsif (defined($options{params}->{services}) && $options{params}->{services} == 1) {
-        processEventsServices($etlwk, start => $startUtime, end => $endUtime, liveServices => $liveServices, %options);
+    if ($options{params}->{type} eq 'perfdata_day') {
+        perfdataDay($etlwk, %options);
+    } elsif ($options{params}->{type} eq 'perfdata_month') {
+        perfdataMonth($etlwk, %options);
+    } elsif ($options{params}->{type} eq 'perfdata_hour') {
+        perfdataHour($etlwk, %options);
     }
+}
+
+sub centileDay {
+    my ($etlwk, %options) = @_;
+
+    my ($currentDayId) = $time->getEntryID($options{params}->{start});
+
+    my $metricsId = $centileAgregates->getMetricsCentile(etlProperties => $options{etlProperties});
+    $centileAgregates->calcMetricsCentileValueMultipleDays(
+        metricsId => $metricsId,
+        start => $options{params}->{start},
+        end => $options{params}->{end},
+        granularity => 'day',
+        timeId => $currentDayId
+    );
+}
+
+sub centileMonth {
+    my ($etlwk, %options) = @_;
+
+    my ($previousMonthStartTimeId) = $time->getEntryID($options{params}->{start});
+
+    my $metricsId = $centileAgregates->getMetricsCentile(etlProperties => $options{etlProperties});
+    $centileAgregates->calcMetricsCentileValueMultipleDays(
+        metricsId => $metricsId,
+        start => $options{params}->{start},
+        end => $options{params}->{end},
+        granularity => 'month',
+        timeId => $previousMonthStartTimeId
+    );
+}
+
+sub centileWeek {
+    my ($etlwk, %options) = @_;
+
+    my ($currentDayId) = $time->getEntryID($options{params}->{start});
+
+    my $metricsId = $centileAgregates->getMetricsCentile(etlProperties => $options{etlProperties});
+    $centileAgregates->calcMetricsCentileValueMultipleDays(
+        metricsId => $metricsId,
+        start => $options{params}->{start},
+        end => $options{params}->{end},
+        granularity => 'week',
+        timeId => $currentDayId
+    );
 }
 
 sub centile {
     my ($etlwk, %options) = @_;
 
-    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing hosts day: $options{params}->{start} => $options{params}->{end} [$options{params}->{liveserviceName}]");
-    my $ranges = $timePeriod->getTimeRangesForDay($options{startWeekDay}, $options{params}->{liveserviceName}, $options{startUtime});
-    my $dayEvents = $biHostEvents->getDayEvents($options{startUtime}, $options{endUtime}, $options{params}->{liveserviceId}, $ranges);
-    $hostAv->insertStats($dayEvents, $options{startTimeId}, $options{params}->{liveserviceId});
-}
-
-sub availabilityDayServices {
-    my ($etlwk, %options) = @_;
-
-    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing services day: $options{params}->{start} => $options{params}->{end} [$options{params}->{liveserviceName}]");
-    my $ranges = $timePeriod->getTimeRangesForDay($options{startWeekDay}, $options{params}->{liveserviceName}, $options{startUtime});
-    my $dayEvents = $biServiceEvents->getDayEvents($options{startUtime}, $options{endUtime}, $options{params}->{liveserviceId}, $ranges);
-    $serviceAv->insertStats($dayEvents, $options{startTimeId}, $options{params}->{liveserviceId});
-}
-
-sub availabilityMonthHosts {
-    my ($etlwk, %options) = @_;
-
-    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing services month: $options{params}->{start} => $options{params}->{end}");
-    my $data = $hostAv->getHGMonthAvailability($options{params}->{start}, $options{params}->{end}, $biHostEvents);
-    $hgAv->insertStats($options{startTimeId}, $data);
-}
-
-sub availabilityMonthServices {
-    my ($etlwk, %options) = @_;
-
-    $etlwk->{messages}->writeLog("INFO", "[AVAILABILITY] Processing hosts month: $options{params}->{start} => $options{params}->{end}");
-    my $data = $serviceAv->getHGMonthAvailability_optimised($options{params}->{start}, $options{params}->{end}, $biServiceEvents);
-    $hgServiceAv->insertStats($options{startTimeId}, $data);
-}
-
-sub availability {
-    my ($etlwk, %options) = @_;
-
     initVars($etlwk, %options);
 
-    my ($startTimeId, $startUtime) = $time->getEntryID($options{params}->{start});
-    my ($endTimeId, $endUtime) = $time->getEntryID($options{params}->{end});
-    my $startWeekDay = $utils->getDayOfWeek($options{params}->{start});
-
-    if ($options{params}->{type} eq 'availability_day_hosts') {
-        availabilityDayHosts(
-            $etlwk,
-            startTimeId => $startTimeId,
-            startUtime => $startUtime,
-            endTimeId => $endTimeId,
-            endUtime => $endUtime,
-            startWeekDay => $startWeekDay,
-            %options
-        );
-    } elsif ($options{params}->{type} eq 'availability_day_services') {
-        availabilityDayServices(
-            $etlwk,
-            startTimeId => $startTimeId,
-            startUtime => $startUtime,
-            endTimeId => $endTimeId,
-            endUtime => $endUtime,
-            startWeekDay => $startWeekDay,
-            %options
-        );
-    } elsif ($options{params}->{type} eq 'availability_month_services') {
-         availabilityMonthServices(
-            $etlwk,
-            startTimeId => $startTimeId,
-            %options
-         );
-    } elsif ($options{params}->{type} eq 'availability_month_hosts') {
-        availabilityMonthHosts(
-            $etlwk,
-            startTimeId => $startTimeId,
-            %options
-        );
+    if ($options{params}->{type} eq 'centile_day') {
+        centileDay($etlwk, %options);
+    } elsif ($options{params}->{type} eq 'centile_month') {
+        centileMonth($etlwk, %options);
+    } elsif ($options{params}->{type} eq 'centile_week') {
+        centileWeek($etlwk, %options);
     }
 }
 

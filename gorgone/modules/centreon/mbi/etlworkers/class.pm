@@ -255,6 +255,7 @@ sub action_centreonmbietlworkersperfdata {
             dbmon => $options{data}->{content}->{dbmon},
             dbbi => $options{data}->{content}->{dbbi}
         );
+
         if ($options{data}->{content}->{params}->{type} eq 'sql') {
             gorgone::modules::centreon::mbi::etlworkers::perfdata::main::sql($self, params => $options{data}->{content}->{params});
         } elsif ($options{data}->{content}->{params}->{type} =~ /^perfdata_/) {

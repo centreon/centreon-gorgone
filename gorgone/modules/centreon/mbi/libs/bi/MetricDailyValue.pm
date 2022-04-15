@@ -1,14 +1,22 @@
-##################################################
-# CENTREON
+# 
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-# Source Copyright 2005 - 2015 CENTREON
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
 #
-# Unauthorized reproduction, copy and distribution
-# are not allowed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# For more informations : contact@centreon.com
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-##################################################
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 use strict;
 use warnings;
@@ -23,14 +31,19 @@ package gorgone::modules::centreon::mbi::libs::bi::MetricDailyValue;
 sub new {
 	my $class = shift;
 	my $self  = {};
-	$self->{"logger"}	= shift;
-	$self->{"centstorage"} = shift;
-	if (@_) {
-		$self->{"centreon"}  = shift;
-	}
-	$self->{'today_servicemetrics'} = "mod_bi_tmp_today_servicemetrics";
-	$self->{"name"} = "mod_bi_metricdailyvalue";
-	$self->{"timeColumn"} = "time_id";
+	$self->{logger}	= shift;
+	$self->{centstorage} = shift;
+
+    $self->{name_minmaxavg_tmp} = 'mod_bi_tmp_minmaxavgvalue';
+    $self->{name_firstlast_tmp} = 'mod_bi_tmp_firstlastvalues';
+    if (@_) {
+        $self->{name_minmaxavg_tmp} .= $_[0];
+        $self->{name_firstlast_tmp} .= $_[0];
+    }
+
+	$self->{today_servicemetrics} = "mod_bi_tmp_today_servicemetrics";
+	$self->{name} = "mod_bi_metricdailyvalue";
+	$self->{timeColumn} = "time_id";
 	bless $self, $class;
 	return $self;
 }
@@ -45,14 +58,15 @@ sub getTimeColumn() {
 	return $self->{'timeColumn'};
 }
 
-sub dropTempTables{
+sub dropTempTables {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
-	my $query = "DROP TABLE `mod_bi_tmp_minmaxavgvalue`";
+	my $query = "DROP TABLE `" . $self->{name_minmaxavg_tmp} . "`";
 	$db->query($query);
-	$query = "DROP TABLE `mod_bi_tmp_firstlastvalues`";
+	$query = "DROP TABLE `" . $self->{name_firstlast_tmp} . "`";
 	$db->query($query);
 }
+
 sub insertValues {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
@@ -60,14 +74,14 @@ sub insertValues {
 	my $liveServiceId = shift;
 	my $timeId = shift;
 	
-	my $query = "INSERT INTO ".$self->{"name"};
+	my $query = "INSERT INTO " . $self->{"name"};
 	$query .= " SELECT sm.id as servicemetric_id, '".$timeId."', ".$liveServiceId." as liveservice_id,";
 	$query .= " mmavt.avg_value, mmavt.min_value, mmavt.max_value, flvt.first_value, flvt.last_value, m.max,";
 	$query .= " m.warn, m.crit";
-	$query .= " FROM mod_bi_tmp_minmaxavgvalue mmavt";
-	$query .= " JOIN (metrics m, ".$self->{'today_servicemetrics'}." sm)";
+	$query .= " FROM " . $self->{name_minmaxavg_tmp} . " mmavt";
+	$query .= " JOIN (metrics m, " . $self->{'today_servicemetrics'} . " sm)";
 	$query .= " ON (mmavt.id_metric = m.metric_id and mmavt.id_metric = sm.metric_id)";
-	$query .= " LEFT JOIN mod_bi_tmp_firstlastvalues flvt ON (mmavt.id_metric = flvt.id_metric)";
+	$query .= " LEFT JOIN " . $self->{name_firstlast_tmp} . " flvt ON (mmavt.id_metric = flvt.id_metric)";
 	$db->query($query);
 
 	$self->dropTempTables();
@@ -78,7 +92,7 @@ sub getMetricCapacityValuesOnPeriod {
 	my $db = $self->{"centstorage"};
 	my $logger =  $self->{"logger"};
 	my ($start_time_id, $end_time_id, $etlProperties) = @_;
-	
+
 	my $query =	" SELECT servicemetric_id, liveservice_id, ";
 	$query .=		" first_value,  total";
 	$query .=	" FROM  mod_bi_liveservice l, mod_bi_servicemetrics m, ".$self->{"name"}." v";
@@ -97,7 +111,6 @@ sub getMetricCapacityValuesOnPeriod {
 		my @table = ($row->{"servicemetric_id"}, $row->{"liveservice_id"}, $row->{"first_value"}, $row->{"total"});
 		$data{$row->{"servicemetric_id"}.";".$row->{"liveservice_id"}} = \@table;
 	}
-	$sth->finish;
 	
 	$query = 	" SELECT servicemetric_id, liveservice_id, ";
 	$query .= 		"last_value, total";
@@ -111,7 +124,7 @@ sub getMetricCapacityValuesOnPeriod {
 	$query .=		" AND sc_id IN (".$etlProperties->{'capacity.include.servicecategories'}.")";
 	$query .=		" AND v.servicemetric_id = m.id";
 	$query .=	" GROUP BY servicemetric_id, liveservice_id";
-	
+
 	$sth = $db->query($query);
 	while (my $row = $sth->fetchrow_hashref()) {
 		my $entry =  $data{$row->{"servicemetric_id"}.";".$row->{"liveservice_id"}};
@@ -127,7 +140,6 @@ sub getMetricCapacityValuesOnPeriod {
 			$data{$row->{"servicemetric_id"}.";".$row->{"liveservice_id"}} = \@table;
 		}
 	}
-	$sth->finish;
 	return \%data;
 }
 

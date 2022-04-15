@@ -77,8 +77,6 @@ sub deleteEntriesForRebuild {
 
     my $sql = [];
     if (!$biTables->isTablePartitioned($options{name})) {
-        push @$sql, $utils->getDateEpoch($options{start}, $options{end});
-
         push @$sql,
             [
                 "[PURGE] Delete table [$options{name}] from $options{start} to $options{end}",

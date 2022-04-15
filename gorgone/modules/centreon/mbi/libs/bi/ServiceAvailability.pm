@@ -1,14 +1,22 @@
-##################################################
-# CENTREON
+# 
+# Copyright 2019 Centreon (http://www.centreon.com/)
 #
-# Source Copyright 2005 - 2015 CENTREON
+# Centreon is a full-fledged industry-strength solution that meets
+# the needs in IT infrastructure and application monitoring for
+# service performance.
 #
-# Unauthorized reproduction, copy and distribution
-# are not allowed.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# For more informations : contact@centreon.com
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-##################################################
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 use strict;
 use warnings;
@@ -37,12 +45,12 @@ sub new {
 	return $self;
 }
 
-sub getName() {
+sub getName {
 	my $self = shift;
 	return $self->{'name'};
 }
 
-sub getTimeColumn() {
+sub getTimeColumn {
 	my $self = shift;
 	return $self->{'timeColumn'};
 }
@@ -111,17 +119,17 @@ sub insertStats {
 	$self->{centstorage}->query($query) if ($counter > 0);
 }
 
-sub getCurrentNbLines{
+sub getCurrentNbLines {
 	my $self = shift;
 	return $self->{"nbLinesInFile"};
 }
 
-sub getCommitParam{
+sub getCommitParam {
 	my $self = shift;
 	return $self->{"commitParam"};
 }
 
-sub setCurrentNbLines{
+sub setCurrentNbLines {
 	my $self = shift;
 	my $nbLines = shift;
 	$self->{"nbLinesInFile"} = $nbLines;

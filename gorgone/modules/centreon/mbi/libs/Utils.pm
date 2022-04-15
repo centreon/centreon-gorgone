@@ -109,7 +109,7 @@ sub subtractDateMonths {
     $month = '0' . $month if ($month < 10);
     my $day = $dt->day();
     $day = '0' . $day if ($day < 10);
-    return $dt->year() . '-' . $month . '-' . $day,
+    return $dt->year() . '-' . $month . '-' . $day;
 }
 
 sub subtractDateDays {
@@ -125,7 +125,7 @@ sub subtractDateDays {
     $month = '0' . $month if ($month < 10);
     my $day = $dt->day();
     $day = '0' . $day if ($day < 10);
-    return $dt->year() . '-' . $month . '-' . $day,
+    return $dt->year() . '-' . $month . '-' . $day;
 }
 
 sub getDayOfWeek {

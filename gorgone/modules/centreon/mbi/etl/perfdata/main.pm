@@ -27,6 +27,7 @@ use gorgone::modules::centreon::mbi::libs::bi::Time;
 use gorgone::modules::centreon::mbi::libs::bi::LiveService;
 use gorgone::modules::centreon::mbi::libs::bi::MySQLTables;
 use gorgone::modules::centreon::mbi::libs::Utils;
+use gorgone::standard::constants qw(:all);
 
 my ($biTables, $utils, $liveService, $time);
 
@@ -76,8 +77,6 @@ sub deleteEntriesForRebuild {
 
     my $sql = [];
     if (!$biTables->isTablePartitioned($options{name})) {
-        push @$sql, $utils->getDateEpoch($options{start}, $options{end});
-
         push @$sql,
             [
                 "[PURGE] Delete table [$options{name}] from $options{start} to $options{end}",
@@ -190,8 +189,8 @@ sub processDay {
         while (my ($liveServiceName, $liveServiceId) = each (%$liveServices)) {
             push @{$etl->{run}->{schedule}->{perfdata}->{stages}->[1]}, {
                 type => 'perfdata_day',
-                liveserviceName => $liveserviceName,
-                liveserviceId => $liveserviceId,
+                liveserviceName => $liveServiceName,
+                liveserviceId => $liveServiceId,
                 start => $start,
                 end => $end
             };
@@ -208,7 +207,7 @@ sub processDay {
                 };
             }
             if (defined($etl->{run}->{etlProperties}->{'centile.week'}) && $etl->{run}->{etlProperties}->{'centile.week'} eq '1') {
-                if ($utils->getDayOfWeek($end) eq $etlProperties->{'centile.weekFirstDay'}) {
+                if ($utils->getDayOfWeek($end) eq $etl->{run}->{etlProperties}->{'centile.weekFirstDay'}) {
                     processWeek($etl, $end);
                 }
             }
@@ -219,8 +218,8 @@ sub processDay {
 sub processWeek {
     my ($etl, $date) = @_;
 
-    my $start = $utils->subtractDateWeeks($date, 1);
-    my $end = $utils->subtractDateDays($date, 1)
+    my $start = $utils->subtractDateDays($date, 7);
+    my $end = $utils->subtractDateDays($date, 1);
 
     $time->insertTimeEntriesForPeriod($start, $end);
 
@@ -244,7 +243,7 @@ sub processMonth {
 
     if (!defined($etl->{run}->{etlProperties}->{'capacity.include.servicecategories'}) || $etl->{run}->{etlProperties}->{'capacity.include.servicecategories'} eq ""
         || !defined($etl->{run}->{etlProperties}->{'capacity.include.liveservices'}) || $etl->{run}->{etlProperties}->{'capacity.include.liveservices'} eq "") {
-        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', "[SCHEDULER][PERFDATA] Skipping month: [" . $start . "] to [" . $end . "]" ] ] });
+        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $etl->{run}->{token}, data => { messages => [ ['I', "[SCHEDULER][PERFDATA] Skipping month: [" . $start . "] to [" . $end . "]" ] ] });
         return ;
     }
 
@@ -350,8 +349,8 @@ sub rebuildProcessing {
     if ($etl->{run}->{options}->{start} ne '' && $etl->{run}->{options}->{end} ne '') {
         ($start, $end) = ($etl->{run}->{options}->{start}, $etl->{run}->{options}->{end});
         while (my ($key, $values) = each %$periods) {
-            $values->{'start'} = $options->{'start'};
-            $values->{'end'} = $options->{'end'};
+            $values->{start} = $etl->{run}->{options}->{start};
+            $values->{end} = $etl->{run}->{options}->{end};
         }
     } else {
         # getting max perfdata retention period to fill mod_bi_time
@@ -375,8 +374,8 @@ sub rebuildProcessing {
 
     # rebuilding statistics by hour
     ($start, $end) = ($periods->{'perfdata.hourly'}->{start}, $periods->{'perfdata.hourly'}->{'end'});
-    
-    my $days = $utils->getRangePartitionDate($start, $end);
+
+    $days = $utils->getRangePartitionDate($start, $end);
     foreach (@$days) {
         $end = $_->{date};
         processHours($etl, $start, $end);
@@ -390,13 +389,13 @@ sub prepare {
     initVars($etl);
 
     if (!defined($etl->{run}->{etlProperties}->{'statistics.type'}) || $etl->{run}->{etlProperties}->{'statistics.type'} eq "availability") {
-        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] Performance statistics calculation disabled' ] ] });
+        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $etl->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] Performance statistics calculation disabled' ] ] });
         return ;
     }
 
     if ((!defined($etl->{run}->{options}->{no_centile}) || $etl->{run}->{options}->{no_centile} == 0) && 
         defined($etl->{run}->{etlProperties}->{'centile.include.servicecategories'}) and $etl->{run}->{etlProperties}->{'centile.include.servicecategories'} eq '') {
-        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $self->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] No service categories selected for centile calculation - centile agregation will not be calculated' ] ] });
+        $etl->send_log(code => GORGONE_MODULE_CENTREON_MBIETL_PROGRESS, token => $etl->{run}->{token}, data => { messages => [ ['I', '[SCHEDULER][PERFDATA] No service categories selected for centile calculation - centile agregation will not be calculated' ] ] });
     }
 
     my $liveServiceList = $liveService->getLiveServicesByNameForTpIds($etl->{run}->{etlProperties}->{'liveservices.perfdata'});

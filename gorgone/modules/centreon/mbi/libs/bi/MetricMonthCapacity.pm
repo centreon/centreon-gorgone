@@ -67,7 +67,7 @@ sub insertStats {
     my $append = '';
 
 	while (my ($key, $entry) = each %$data) {
-        $query .= $append . "($time_id, ";
+        $query .= $append . "($time_id";
 
 		my $size = scalar(@$entry);
 		for (my $i = 0; $i < $size; $i++) {

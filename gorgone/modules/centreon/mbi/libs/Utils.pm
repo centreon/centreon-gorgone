@@ -135,7 +135,7 @@ sub getDayOfWeek {
         $self->{logger}->writeLog('ERROR', "Verify date format");
     }
 
-    return DateTime->new(year => $1, month => $2, day => $3, hour => 0, minute => 0, second => 0, time_zone => $self->{tz})->day_name();
+    return lc(DateTime->new(year => $1, month => $2, day => $3, hour => 0, minute => 0, second => 0, time_zone => $self->{tz})->day_name());
 }
 
 sub getDateEpoch {

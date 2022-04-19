@@ -401,7 +401,8 @@ sub prepare {
     }
 
     # extract Centreon configuration DB from monitoring server and insert it into reporting server
-    if ($etl->{run}->{options}->{databin_only} == 0 && (!defined($etl->{run}->{options}->{bam_only}) || $etl->{run}->{options}->{bam_only} == 0)) {
+    if ((!defined($etl->{run}->{options}->{databin_only}) || $etl->{run}->{options}->{databin_only} == 0) 
+        && (!defined($etl->{run}->{options}->{bam_only}) || $etl->{run}->{options}->{bam_only} == 0)) {
         extractCentreonDB($etl, $etl->{run}->{etlProperties});
     }
 }

@@ -38,28 +38,30 @@ sub new {
 }
 
 sub checkBasicOptions {
-    my ($self, $logger, $options) = @_;
-
-    if (!defined($options->{'returnCode'}) || !$options->{'returnCode'}) {
-        $self->{logger}->writeLog("ERROR", "Check --help to see available options");
-    }
+    my ($self, $options) = @_;
 
     # check execution mode daily to extract yesterday data or rebuild to get more historical data
-    if ((!defined($options->{'daily'}) && !defined($options->{'rebuild'}) && !defined($options->{'create-tables'}) && !defined($options->{'centile'}))
-        || (defined($options->{'daily'}) && defined($options->{'rebuild'}))) {
-        $self->{logger}->writeLog("ERROR", "Specify one execution method. Check program help for more informations");
+    if (($options->{daily} == 0 && $options->{rebuild} == 0 && $options->{create_tables} == 0 && (!defined($options->{centile}) || $options->{centile} == 0))
+        || ($options->{daily} == 1 && $options->{rebuild} == 1)) {
+        $self->{logger}->writeLogError("Specify one execution method. Check program help for more informations");
+        return 1;
     }
+
     # check if options are set correctly for rebuild mode
-    if ((defined($options->{'rebuild'}) || defined($options->{'create-tables'})) 
-        && (defined($options->{'start'}) && !defined($options->{'end'})) 
-        ||(!defined($options->{'start'}) && defined($options->{'end'}))) {
-        $self->{logger}->writeLog("ERROR", "Specify both options --start and --end or neither of them to use default data retention options");
+    if (($options->{rebuild} == 1 || $options->{create_tables} == 1) 
+        && ($options->{start} ne '' && $options->{end} eq '') 
+        || ($options->{start} eq '' && $options->{end} ne '')) {
+        $self->{logger}->writeLogError("Specify both options --start and --end or neither of them to use default data retention options");
+        return 1;
     }
     # check start and end dates format
-    if (defined($options->{'rebuild'}) && defined($options->{'start'}) && defined($options->{'end'}) 
-        && !$self->checkDateFormat($options->{'start'}, $options->{'end'})) {
-        $self->{logger}->writeLog("ERROR", "Verify period start or end date format");
+    if ($options->{rebuild} == 1 && $options->{start} ne '' && $options->{end} ne '' 
+        && !$self->checkDateFormat($options->{start}, $options->{end})) {
+        $self->{logger}->writeLogError("Verify period start or end date format");
+        return 1;
     }
+
+    return 0;
 }
 
 sub buildCliMysqlArgs {
@@ -191,7 +193,7 @@ sub getRangePartitionDate {
 }
 
 sub checkDateFormat {
-	my ($self, $start, $end)= @_;
+	my ($self, $start, $end) = @_;
 
 	if (defined($start) && $start =~ /[1-2][0-9]{3}\-[0-1][0-9]\-[0-3][0-9]/
         && defined($end) && $end =~ /[1-2][0-9]{3}\-[0-1][0-9]\-[0-3][0-9]/) {

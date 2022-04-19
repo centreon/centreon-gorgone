@@ -143,8 +143,8 @@ sub createTempTableMetricDayFirstLastValues {
     my $db = $self->{"centstorage"};
     $db->query("DROP TABLE IF EXISTS `" . $self->{name_firstlast_tmp} . "`");
     my $createTable = " CREATE TABLE `" . $self->{name_firstlast_tmp} . "` (";
-    $createTable .= " first_value FLOAT NULL,";
-    $createTable .= " last_value FLOAT NULL,";
+    $createTable .= " `first_value` FLOAT NULL,";
+    $createTable .= " `last_value` FLOAT NULL,";
     $createTable .= " id_metric INT NULL";
     if (defined($useMemory) && $useMemory eq "true") {
         $createTable .= ") ENGINE=MEMORY CHARSET=utf8 COLLATE=utf8_general_ci;";
@@ -208,7 +208,7 @@ sub getFirstAndLastValues {
     $db->query($query);
     
     $self->createTempTableMetricDayFirstLastValues($useMemory);
-    $query = "INSERT INTO " . $self->{name_firstlast_tmp} . " SELECT d.value as first_value, d2.value as last_value, d.id_metric";
+    $query = "INSERT INTO " . $self->{name_firstlast_tmp} . " SELECT d.value as `first_value`, d2.value as `last_value`, d.id_metric";
     $query .= " FROM data_bin as d, data_bin as d2, " . $self->{name_minmaxctime_tmp} . " as db";
     $query .= " WHERE db.id_metric=d.id_metric AND db.min_val=d.ctime";
     $query .=         " AND db.id_metric=d2.id_metric AND db.max_val=d2.ctime";

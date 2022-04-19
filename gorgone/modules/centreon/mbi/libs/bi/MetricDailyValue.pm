@@ -76,7 +76,7 @@ sub insertValues {
 	
 	my $query = "INSERT INTO " . $self->{"name"};
 	$query .= " SELECT sm.id as servicemetric_id, '".$timeId."', ".$liveServiceId." as liveservice_id,";
-	$query .= " mmavt.avg_value, mmavt.min_value, mmavt.max_value, flvt.first_value, flvt.last_value, m.max,";
+	$query .= " mmavt.avg_value, mmavt.min_value, mmavt.max_value, flvt.`first_value`, flvt.`last_value`, m.max,";
 	$query .= " m.warn, m.crit";
 	$query .= " FROM " . $self->{name_minmaxavg_tmp} . " mmavt";
 	$query .= " JOIN (metrics m, " . $self->{'today_servicemetrics'} . " sm)";
@@ -94,7 +94,7 @@ sub getMetricCapacityValuesOnPeriod {
 	my ($start_time_id, $end_time_id, $etlProperties) = @_;
 
 	my $query =	" SELECT servicemetric_id, liveservice_id, ";
-	$query .=		" first_value,  total";
+	$query .=		" `first_value`,  total";
 	$query .=	" FROM  mod_bi_liveservice l, mod_bi_servicemetrics m, ".$self->{"name"}." v";
 	$query .=	" WHERE timeperiod_id IN (".$etlProperties->{'capacity.include.liveservices'}.")";
 	$query .= " AND l.id = v.liveservice_id";
@@ -108,12 +108,12 @@ sub getMetricCapacityValuesOnPeriod {
 	my $sth = $db->query($query);
 	my %data = ();
 	while (my $row = $sth->fetchrow_hashref()) {
-		my @table = ($row->{"servicemetric_id"}, $row->{"liveservice_id"}, $row->{"first_value"}, $row->{"total"});
+		my @table = ($row->{"servicemetric_id"}, $row->{"liveservice_id"}, $row->{first_value}, $row->{"total"});
 		$data{$row->{"servicemetric_id"}.";".$row->{"liveservice_id"}} = \@table;
 	}
 	
 	$query = 	" SELECT servicemetric_id, liveservice_id, ";
-	$query .= 		"last_value, total";
+	$query .= 		"`last_value`, total";
 	$query .= 	" FROM mod_bi_liveservice l, mod_bi_servicemetrics m, ".$self->{"name"}." v";
 	$query .=	" WHERE timeperiod_id IN (".$etlProperties->{'capacity.include.liveservices'}.")";
 	$query .= " AND l.id = v.liveservice_id";

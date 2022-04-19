@@ -100,14 +100,15 @@ sub insertStats {
 		if ($stats->[0] + $stats->[1] + $stats->[4] == 0) {
 			next;
 		}
+
         $query .= $append . "($modBiServiceId, $time_id, $liveserviceId";
 		for (my $i = 0; $i < scalar(@$stats); $i++) {
 			$query .= ', ' . $stats->[$i];
 		}
         $query .= ')';
-
         $append = ',';
 		$counter++;
+
         if ($counter >= $insertParam) {
             $self->{centstorage}->query($query);
             $query = $query_start;
@@ -115,6 +116,7 @@ sub insertStats {
             $append = '';
 		}
 	}
+
 	$self->{centstorage}->query($query) if ($counter > 0);
 }
 

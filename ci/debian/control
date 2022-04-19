@@ -36,7 +36,6 @@ Depends:
   libnet-ldap-perl,
   libdatetime-perl,
   libtry-tiny-perl,
-  libxml-simple-perl,
   libxml-libxml-simple-perl,
   libuuid-perl,
   libdigest-md5-file-perl,

@@ -57,16 +57,16 @@ sub prepareQuery {
 	my $db = $self->{"centstorage"};
 
 	my $query = "INSERT INTO `".$self->{'name'}."`".
-				" (`modbiservice_id`, `modbiliveservice_id`,".
-				" `state`, `start_time`, `sla_duration`,".
-				" `end_time`,  `ack_time`, `last_update`, `duration`) ".
-				" VALUES (?,?,?,?,?,?,?,?, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(?), FROM_UNIXTIME(?)))";
+        " (`modbiservice_id`, `modbiliveservice_id`,".
+        " `state`, `start_time`, `sla_duration`,".
+        " `end_time`,  `ack_time`, `last_update`, `duration`) ".
+        " VALUES (?,?,?,?,?,?,?,?, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(?), FROM_UNIXTIME(?)))";
 	$self->{'statement'} = $db->prepare($query);
 	$self->{'dbinstance'} = $db->getInstance;
 	($self->{'dbinstance'})->begin_work;
 }
 
-sub createTempBIEventsTable{
+sub createTempBIEventsTable {
 	my ($self) = @_;
 	my $db = $self->{"centstorage"};
 	$db->query("DROP TABLE IF EXISTS `mod_bi_servicestateevents_tmp`");
@@ -91,10 +91,10 @@ sub prepareTempQuery {
 	my $db = $self->{"centstorage"};
 
 	my $query = "INSERT INTO `".$self->{'tmp_name'}."`".
-				" (`host_id`,`service_id`,`modbiliveservice_id`,".
-				" `state`, `start_time`, `sla_duration`,".
-				" `end_time`,  `ack_time`, `last_update`, `duration`) ".
-				" VALUES (?,?,?,?,?,?,?,?,?, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(?), FROM_UNIXTIME(?)))";
+        " (`host_id`,`service_id`,`modbiliveservice_id`,".
+        " `state`, `start_time`, `sla_duration`,".
+        " `end_time`,  `ack_time`, `last_update`, `duration`) ".
+        " VALUES (?,?,?,?,?,?,?,?,?, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(?), FROM_UNIXTIME(?)))";
 	$self->{'statement'} = $db->prepare($query);
 	$self->{'dbinstance'} = $db->getInstance;
 	($self->{'dbinstance'})->begin_work;
@@ -108,10 +108,10 @@ sub bindParam {
 	my $size = scalar(@$row);
 	my $sth = $self->{'statement'};
 	for (my $i = 0; $i < $size; $i++) {
-			$sth->bind_param($i + 1, $row->[$i]);
+        $sth->bind_param($i + 1, $row->[$i]);
 	}
-	$sth->bind_param($size+1, $row->[4]);
-	$sth->bind_param($size+2, $row->[6]);
+	$sth->bind_param($size + 1, $row->[4]);
+	$sth->bind_param($size + 2, $row->[6]);
 
 	($self->{'statement'})->execute;
 	if (defined(($self->{'dbinstance'})->errstr)) {
@@ -136,92 +136,73 @@ sub getDayEvents {
 	my ($start, $end, $liveserviceId, $ranges) = @_;
 	my $liveServiceList = shift;
 	my %results = ();
-	
-	# Profiling >>>>>
-	my $baseTime = time();
-	my $diffTime = 0;
-	my $countEvent = 0;
-	# <<<< Profiling
-	
+
 	my $query = "SELECT start_time, end_time, state, modbiservice_id";
-	$query .= " FROM `".$self->{'name'}."`";
-	$query .= " WHERE `start_time` < ".$end;
-    $query .= " AND `end_time` > ".$start;
+	$query .= " FROM `" . $self->{'name'} . "`";
+	$query .= " WHERE `start_time` < " . $end;
+    $query .= " AND `end_time` > " . $start;
     $query .= " AND `state` IN (0,1,2,3)";
-    $query .= " AND modbiliveservice_id=".$liveserviceId;
+    $query .= " AND modbiliveservice_id=" . $liveserviceId;
 	my $sth = $db->query($query);
-	
+
 	if (!scalar(@$ranges)) {
 		return \%results;
 	}
-	
-	# Profiling >>>>>
-	$diffTime = time() - $baseTime;
-	$self->{"logger"}->writeLog("DEBUG","[".localtime(time)."][PROFILING][SERVICE] Get all events between ".$start." and ".$end." for liveservice_id ".$liveserviceId." :[".$diffTime."]sec");
-	$baseTime = time();
-	# <<<< Profiling
-	
+
 	while (my $row = $sth->fetchrow_hashref()) {
-			my $entryID = $row->{"modbiservice_id"};
-			
-			my ($started, $ended) = (0,0);
-			my $rangeSize = scalar(@$ranges);
-			my $eventDuration = 0;
-			for(my $count = 0; $count < $rangeSize; $count++) {
-				my $currentStart = $row->{"start_time"};
-				my $currentEnd = $row->{"end_time"};
+        my $entryID = $row->{modbiservice_id};
+
+        my ($started, $ended) = (0,0);
+        my $rangeSize = scalar(@$ranges);
+        my $eventDuration = 0;
+        for (my $count = 0; $count < $rangeSize; $count++) {
+            my $currentStart = $row->{start_time};
+            my $currentEnd = $row->{end_time};
 				
-	    		my $range = $ranges->[$count];
-				my ($rangeStart, $rangeEnd) = ($range->[0], $range->[1]);
-				if ($currentStart < $rangeEnd && $currentEnd > $rangeStart) {
-			    	if ($currentStart < $rangeStart) {
-		    			$currentStart = $rangeStart;
-		    		}elsif ($count == 0) { 
-		    			$started = 1;
-			    	}
-			    	if ($currentEnd > $rangeEnd) {
-		    			$currentEnd = $rangeEnd;
-		    		}elsif ($count == $rangeSize - 1) {
-			    		$ended = 1;
-			    	}
-		    		$eventDuration += $currentEnd - $currentStart;
-		    	}
-			}
-			if (!defined($results{$entryID})) {
-				my @tab = (0, 0, 0, 0, 0, 0, 0, 0, 0);
-				
-		
-				#New table - sync with the real table in centreon_storage database
-				#  0: OK time , 1: CRITICAL time, 2 : DEGRADED time 3 : alert_unavailable_opened
-				#  4: alert unavailable_closed 5 : alert_degraded_opened  6 : alertes_degraded_closed
-				#  7 : alert_unknown_opened 8 : alert_unknown_closed
-				$results{$entryID} = \@tab;
-			}
-			my $stats = $results{$entryID};
-			my $state = $row->{'state'};
-			if ($state == 0) {
-				$stats->[0] += $eventDuration;
-			}elsif ($state == 1) {
-				$stats->[2] += $eventDuration;
-				$stats->[5] += $started;
-				$stats->[6] += $ended;
-			}elsif ($state == 2) {
-				$stats->[1] += $eventDuration;
-				$stats->[3] += $started;
-				$stats->[4] += $ended;
-			}else {
-				$stats->[7] += $started;
-				$stats->[8] += $ended;
-			}
-			$results{$entryID} = $stats;
-			
-		# Profiling >>>>>
-		$countEvent++;
+            my $range = $ranges->[$count];
+            my ($rangeStart, $rangeEnd) = ($range->[0], $range->[1]);
+            if ($currentStart < $rangeEnd && $currentEnd > $rangeStart) {
+                if ($currentStart < $rangeStart) {
+                    $currentStart = $rangeStart;
+                } elsif ($count == 0) { 
+                    $started = 1;
+                }
+                if ($currentEnd > $rangeEnd) {
+                    $currentEnd = $rangeEnd;
+                } elsif ($count == $rangeSize - 1) {
+                    $ended = 1;
+                }
+                $eventDuration += $currentEnd - $currentStart;
+            }
+        }
+        if (!defined($results{$entryID})) {
+            my @tab = (0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+            #New table - sync with the real table in centreon_storage database
+            #  0: OK time , 1: CRITICAL time, 2 : DEGRADED time 3 : alert_unavailable_opened
+            #  4: alert unavailable_closed 5 : alert_degraded_opened  6 : alertes_degraded_closed
+            #  7 : alert_unknown_opened 8 : alert_unknown_closed
+            $results{$entryID} = \@tab;
+        }
+        my $stats = $results{$entryID};
+        my $state = $row->{state};
+        if ($state == 0) {
+            $stats->[0] += $eventDuration;
+        } elsif ($state == 1) {
+            $stats->[2] += $eventDuration;
+            $stats->[5] += $started;
+            $stats->[6] += $ended;
+        } elsif ($state == 2) {
+            $stats->[1] += $eventDuration;
+            $stats->[3] += $started;
+            $stats->[4] += $ended;
+        } else {
+            $stats->[7] += $started;
+            $stats->[8] += $ended;
+        }
+        $results{$entryID} = $stats;
     }
-	$diffTime = time() - $baseTime;
-	$self->{"logger"}->writeLog("DEBUG","[".localtime(time)."][PROFILING][SERVICE] ".$countEvent." events have been calculated in :[".$diffTime."]sec");
-	# <<<< Profiling
-	
+
     return (\%results);
 }
 

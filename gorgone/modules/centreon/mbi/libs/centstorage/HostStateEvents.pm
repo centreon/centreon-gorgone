@@ -74,13 +74,6 @@ sub agreggateEventsByTimePeriod {
 	my $sth = $db->query($query);
 	$hostEventObjects->createTempBIEventsTable();
 	$hostEventObjects->prepareTempQuery();
-	
-	#Variables use for live statistics
-	my $currentTime = time();
-    my $previousTime = time();
-    my $nbEventTreated = 1;
-	my $previousNbEventsTreated = 0;
-    my $speed = 0;
 
 	while (my $row = $sth->fetchrow_hashref()) {
 		if (!defined($row->{'end_time'})) {
@@ -96,19 +89,15 @@ sub agreggateEventsByTimePeriod {
 			}
 			($tab[3], $tab[4]) = $self->processIncidentForTp($timeRanges,$row->{'start_time'}, $row->{'end_time'});
 			$tab[5] = $row->{'end_time'};
-			$tab[6] = $row->{'ack_time'};
+			$tab[6] = defined($row->{ack_time}) ? $row->{ack_time} : 0;
 			$tab[7] = $row->{'last_update'};
 			if (defined($tab[3]) && $tab[3] != -1) {
 				$hostEventObjects->bindParam(\@tab);
 			}
 		
 		}
-		$nbEventTreated++;
 	}
 	($db->getInstance)->commit;
-	$sth->finish();
-	
-
 }
 
 sub processIncidentForTp {

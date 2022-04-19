@@ -92,12 +92,14 @@ sub insertStats {
         " `alert_other_opened`, `alert_other_closed`)".
         " VALUES ";
 
+    #available+unvailable+alert_unavailable_closed
+
 	my $counter = 0;
     my $query = $query_start;
     my $append = '';
 	while (my ($modBiServiceId, $stats) = each %$data) {
 		my @tab = @$stats;
-		if ($stats->[0] + $stats->[1] + $stats->[4] == 0) {
+		if ($stats->[0] + $stats->[1] + $stats->[2] == 0) {
 			next;
 		}
 

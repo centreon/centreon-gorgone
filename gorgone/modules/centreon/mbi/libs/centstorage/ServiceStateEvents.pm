@@ -54,6 +54,7 @@ sub getTimeColumn() {
 	my $self = shift;
 	return $self->{'timeColumn'};
 }
+
 sub agreggateEventsByTimePeriod {
 	my ($self, $timeperiodList, $start, $end, $liveServiceByTpId, $mode) = @_;
 	my $db = $self->{"centstorage"};
@@ -74,13 +75,6 @@ sub agreggateEventsByTimePeriod {
 	$serviceEventObjects->createTempBIEventsTable();
 	$serviceEventObjects->prepareTempQuery();
 	
-	#Variables use for live statistics
-	my $currentTime = time();
-    my $previousTime = time();
-    my $nbEventTreated = 1;
-	my $previousNbEventsTreated = 0;
-    my $speed = 0;
-	
 	while (my $row = $sth->fetchrow_hashref()) {
 		if (!defined($row->{'end_time'})) {
 			$row->{'end_time'} = $end;
@@ -91,19 +85,17 @@ sub agreggateEventsByTimePeriod {
 			$tab[1] = $row->{'service_id'};
 			$tab[2] = $liveServiceByTpId->{$timeperiodID};
 			$tab[3] = $row->{'state'};
-			if ($mode eq "daily") {
+			if ($mode eq 'daily') {
 				$timeRanges = ($self->{"timePeriodObj"})->getTimeRangesForPeriod($timeperiodID, $row->{'start_time'}, $row->{'end_time'});
 			}
 			($tab[4], $tab[5]) = $self->processIncidentForTp($timeRanges,$row->{'start_time'}, $row->{'end_time'});
 			$tab[6] = $row->{'end_time'};
-			$tab[7] = $row->{'ack_time'};
-			$tab[8] = $row->{'last_update'};
+			$tab[7] = defined($row->{ack_time}) ? $row->{ack_time} : 0;
+			$tab[8] = $row->{last_update};
 			if (defined($tab[4]) && $tab[4] != -1) {
 				$serviceEventObjects->bindParam(\@tab);
 			}
 		}
-
-		$nbEventTreated++;
 	}
 	($db->getInstance)->commit;
 }
@@ -161,7 +153,7 @@ sub dailyPurge {
 	$db->query($query);
 }
 
-sub getNbEvents{
+sub getNbEvents {
 	my $self = shift;
 	my $db = $self->{"centstorage"};
 	my ($start, $end) = @_;

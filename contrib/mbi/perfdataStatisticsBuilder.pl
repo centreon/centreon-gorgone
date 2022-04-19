@@ -7,9 +7,9 @@ use lib "$FindBin::Bin";
 # to be launched from contrib directory
 use lib "$FindBin::Bin/../";
 
-gorgone::script::centreonBIETL->new()->run();
+gorgone::script::perfdataStatisticsBuilder->new()->run();
 
-package gorgone::script::centreonBIETL;
+package gorgone::script::perfdataStatisticsBuilder;
 
 use strict;
 use warnings;
@@ -24,7 +24,7 @@ use base qw(gorgone::class::script);
 sub new {
     my $class = shift;
     my $self = $class->SUPER::new(
-        'centreonBIETL',
+        'perfdataStatisticsBuilder',
         centreon_db_conn => 0,
         centstorage_db_conn => 0,
         noconfig => 0
@@ -37,28 +37,23 @@ sub new {
     $self->{moptions}->{import} = 0;
     $self->{moptions}->{dimensions} = 0;
     $self->{moptions}->{event} = 0;
-    $self->{moptions}->{perfdata} = 0;
+    $self->{moptions}->{perfdata} = 1;
     $self->{moptions}->{start} = '';
     $self->{moptions}->{end} = '';
-    $self->{moptions}->{create_tables} = 0;
-    $self->{moptions}->{ignore_databin} = 0;
-    $self->{moptions}->{centreon_only} = 0;
     $self->{moptions}->{nopurge} = 0;
+    $self->{moptions}->{month_only} = 0;
+    $self->{moptions}->{centile_only} = 0;
+    $self->{moptions}->{no_centile} = 0;
 
     $self->add_options(
-        'url:s' => \$self->{url},
-        'r'     => \$self->{moptions}->{rebuild},
-        'd'     => \$self->{moptions}->{daily},
-        'I'     => \$self->{moptions}->{import},
-        'D'     => \$self->{moptions}->{dimensions},
-        'E'     => \$self->{moptions}->{event},
-        'P'     => \$self->{moptions}->{perfdata},
-        's:s'   => \$self->{moptions}->{start},
-        'e:s'   => \$self->{moptions}->{end},
-        'c'     => \$self->{moptions}->{create_tables},
-        'i'     => \$self->{moptions}->{ignore_databin},
-        'C'     => \$self->{moptions}->{centreon_only},
-        'p'     => \$self->{moptions}->{nopurge}
+        'url:s'        => \$self->{url},
+        'r|rebuild'    => \$self->{moptions}->{rebuild},
+        'd|daily'      => \$self->{moptions}->{daily},
+        's:s'          => \$self->{moptions}->{start},
+        'e:s'          => \$self->{moptions}->{end},
+        'month-only'   => \$self->{moptions}->{month_only},
+        'centile-only' => \$self->{moptions}->{centile_only},
+        'no-centile'   => \$self->{moptions}->{no_centile}
     );
     return $self;
 }
@@ -69,21 +64,9 @@ sub init {
 
     $self->{url} = 'http://127.0.0.1:8085' if (!defined($self->{url}) || $self->{url} eq '');
     $self->{http} = gorgone::class::http::http->new(logger => $self->{logger});
-
     my $utils = gorgone::modules::centreon::mbi::libs::Utils->new($self->{logger});
     if ($utils->checkBasicOptions($self->{moptions}) == 1) {
         exit(1);
-    }
-
-    if ($self->{moptions}->{create_tables} == 0 && 
-        $self->{moptions}->{import} == 0 &&
-        $self->{moptions}->{dimensions} == 0 &&
-        $self->{moptions}->{event} == 0 &&
-        $self->{moptions}->{perfdata} == 0) {
-        $self->{moptions}->{import} = 1;
-        $self->{moptions}->{dimensions} = 1;
-        $self->{moptions}->{event} = 1;
-        $self->{moptions}->{perfdata} = 1;
     }
 }
 
@@ -221,11 +204,11 @@ __END__
 
 =head1 NAME
 
-centreonBIETL - script to execute mbi etl
+perfdataStatisticsBuilder.pl - script to calculate perfdata statistics
 
 =head1 SYNOPSIS
 
-centreonBIETL [options]
+perfdataStatisticsBuilder.pl [options]
 
 =head1 OPTIONS
 
@@ -243,33 +226,15 @@ Set the script log severity (default: 'info').
 
 Print a brief help message and exits.
 
-Execution modes
-
-    -c  Create the reporting database model
-    -d  Daily execution to calculate statistics on yesterday
-    -r  Rebuild mode to calculate statitics on a historical period. Can be used with:
-        Extra arguments for options -d and -r (if none of the following is specified, these one are selected by default: -IDEP):
-        -I  Extract data from the monitoring server
-            Extra arguments for option -I:
-            -C  Extract only Centreon configuration database only. Works with option -I.
-            -i  Ignore perfdata extraction from monitoring server
-            -o  Extract only perfdata from monitoring server
-
-        -D  Calculate dimensions
-        -E  Calculate event and availability statistics
-        -P  Calculate perfdata statistics
-            Common options for -rIDEP:
-            -s  Start date in format YYYY-MM-DD.
-                By default, the program uses the data retention period from Centreon BI configuration
-            -e  End date in format YYYY-MM-DD.
-                By default, the program uses the data retention period from Centreon BI configuration
-            -p  Do not empty statistic tables, delete only entries for the processed period.
-                Does not work on raw data tables, only on Centreon BI statistics tables.
-
 =back
+
+    Rebuild options:
+        [-r | --rebuild] [-s|--start] <YYYY-MM-DD> [-e|--end] <YYYY-MM-DD> [--no-purge] [--month-only] [--centile-only] [--no-centile]
+    Daily run options:
+        [-d | --daily]
 
 =head1 DESCRIPTION
 
-B<centreonBIETL>
+B<perfdataStatisticsBuilder.pl>
 
 =cut

@@ -45,6 +45,7 @@ sub new {
     $self->{moptions}->{ignore_databin} = 0;
     $self->{moptions}->{centreon_only} = 0;
     $self->{moptions}->{nopurge} = 0;
+    $self->{moptions}->{bam_only} = 0;
 
     $self->add_options(
         'url:s'            => \$self->{url},
@@ -53,6 +54,7 @@ sub new {
         's:s'              => \$self->{moptions}->{start},
         'e:s'              => \$self->{moptions}->{end},
         'c|create-tables'  => \$self->{moptions}->{create_tables},
+        'databin-only'     => \$self->{moptions}->{databin_only},
         'i|ignore-databin' => \$self->{moptions}->{ignore_databin},
         'C|centreon-only'  => \$self->{moptions}->{centreon_only},
         'p|no-purge'       => \$self->{moptions}->{nopurge},

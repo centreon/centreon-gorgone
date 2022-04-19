@@ -113,7 +113,7 @@ sub purgeTables {
         $startAndEndSameMonth = 1;
     }
 
-    if ($etl->{run}->{options}->{nopurge} == 0) {
+    if ($etl->{run}->{options}->{nopurge} == 1) {
         # deleting data that will be rewritten
         if ($etl->{run}->{etlProperties}->{'perfdata.granularity'} ne 'hour' && (!defined($etl->{run}->{options}->{month_only}) || $etl->{run}->{options}->{month_only} == 0)) {
             if ((!defined($etl->{run}->{options}->{centile_only}) || $etl->{run}->{options}->{centile_only} == 0)) {                

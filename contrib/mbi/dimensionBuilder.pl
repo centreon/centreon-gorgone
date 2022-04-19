@@ -199,7 +199,7 @@ __END__
 
 =head1 NAME
 
-dimensionsBuilder.pl - script to execute import centreon datas
+dimensionsBuilder.pl - script to compute dimensions
 
 =head1 SYNOPSIS
 

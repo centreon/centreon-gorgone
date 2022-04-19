@@ -86,6 +86,7 @@ sub createTables {
     while (my @row = $sth->fetchrow_array()) {
         my $name = $row[0];
         next if ($name =~ /^(?:$tables)$/);
+
         if (!$biTables->tableExists($name)) { 
             my $structure = $monTables->dumpTableStructure($name);
             push @{$etl->{run}->{schedule}->{import}->{actions}},
@@ -289,6 +290,7 @@ sub selectTables {
     if (!defined($etlProperties->{'statistics.type'})) {
         die 'cannot determine statistics type or compatibility mode for data integration';
     }
+
     if (!defined($options->{databin_only}) || $options->{databin_only} == 0) {
 	  if (!defined($options->{bam_only}) || $options->{bam_only} == 0) {
         if ($etlProperties->{'statistics.type'} eq 'all') {
@@ -330,7 +332,7 @@ sub selectTables {
 
 	my $sth = $etl->{run}->{dbmon_centreon_con}->query("SELECT id FROM modules_informations WHERE name='centreon-bam-server'");
 	if (my $row = $sth->fetchrow_array() && $etlProperties->{'statistics.type'} ne 'perfdata') {
-            $timedTables{mod_bam_reporting_ba_availabilities} = \@timeId;
+            push @notTimedTables, "mod_bam_reporting_ba_availabilities";
 			push @notTimedTables, "mod_bam_reporting_ba";
             push @notTimedTables, "mod_bam_reporting_ba_events";
             push @notTimedTables, "mod_bam_reporting_ba_events_durations";
@@ -391,7 +393,7 @@ sub prepare {
 
     # create non existing tables
     createTables($etl, \%periods, $etl->{run}->{options}, $notTimedTables);
-    
+
     # If we only need to create empty tables, create them then exit program
     return if ($etl->{run}->{options}->{create_tables} == 1);
 

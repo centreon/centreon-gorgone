@@ -38,6 +38,11 @@ if [ "$1" = "configure" ] ; then
     /usr/bin/chmod 600 /var/lib/centreon-gorgone/.ssh/id_rsa
   fi
 
+  # rename files to priority
+  mv /etc/centreon-gorgone/config.d/centreon.yaml /etc/centreon-gorgone/config.d/30-centreon.yaml
+  mv /etc/centreon-gorgone/config.d/centreon-api.yaml /etc/centreon-gorgone/config.d/31-centreon-api.yaml
+  mv /etc/centreon-gorgone/config.d/centreon-audit.yaml /etc/centreon-gorgone/config.d/50-centreon-audit.yaml
+
   systemctl preset gorgoned.service || : >/dev/null 2>&1 || :
 
 fi

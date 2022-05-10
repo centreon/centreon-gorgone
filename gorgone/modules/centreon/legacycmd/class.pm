@@ -312,7 +312,8 @@ sub execute_cmd {
             data => {
                 logging => $options{logging},
                 content => {
-                    parent_id => $options{param}
+                    parent_id => $options{param},
+                    cbd_reload => 'sudo ' . $self->{pollers}->{ $options{target} }->{broker_reload_command}
                 }
             }
         );
@@ -516,8 +517,8 @@ sub execute_cmd {
         }
         my $centreon_dir = (defined($connector->{config}->{centreon_dir})) ?
             $connector->{config}->{centreon_dir} : '/usr/share/centreon';
-        my $cmd = $centreon_dir . '/bin/centreon -u ' . $self->{clapi_user} . ' -p ' .
-            $self->{clapi_password} . ' -w -o CentreonWorker -a processQueue';
+        my $cmd = $centreon_dir . '/bin/centreon -u "' . $self->{clapi_user} . '" -p "' .
+            $self->{clapi_password} . '" -w -o CentreonWorker -a processQueue';
         $self->send_internal_action(
             action => 'COMMAND',
             target => undef,
@@ -571,8 +572,8 @@ sub action_addimporttaskwithparent {
 
     my $centreon_dir = (defined($connector->{config}->{centreon_dir})) ?
         $connector->{config}->{centreon_dir} : '/usr/share/centreon';
-    my $cmd = $centreon_dir . '/bin/centreon -u ' . $self->{clapi_user} . ' -p ' .
-        $self->{clapi_password} . ' -w -o CentreonWorker -a processQueue';
+    my $cmd = $centreon_dir . '/bin/centreon -u "' . $self->{clapi_user} . '" -p "' .
+        $self->{clapi_password} . '" -w -o CentreonWorker -a processQueue';
     $self->send_internal_action(
         action => 'COMMAND',
         token => $options{token},
@@ -582,10 +583,23 @@ sub action_addimporttaskwithparent {
                 {
                     command => $cmd
                 }
+            ],
+            parameters => { no_fork => 1 }
+        }
+    );
+    $self->send_internal_action(
+        action => 'COMMAND',
+        token => $options{token},
+        data => {
+            logging => $options{data}->{logging},
+            content => [
+                {
+                    command => $options{data}->{content}->{cbd_reload}
+                }
             ]
         }
     );
-    
+
     $self->send_log(
         code => GORGONE_ACTION_FINISH_OK,
         token => $options{token},
@@ -788,7 +802,7 @@ sub run {
     );
 
     $self->{clapi_user} = $self->{tpapi_clapi}->get_username();
-    $self->{clapi_password} = $self->{tpapi_clapi}->get_password();
+    $self->{clapi_password} = $self->{tpapi_clapi}->get_password(protected => 1);
 
     # Connect internal
     $connector->{internal_socket} = gorgone::standard::library::connect_com(

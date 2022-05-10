@@ -7,3 +7,5 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 override_dh_gencontrol:
 	dh_gencontrol -- -Tdebian/substvars
+
+override_dh_usrlocal:

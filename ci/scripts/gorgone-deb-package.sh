@@ -48,7 +48,7 @@ mkdir -p /build/centreon-gorgone
 (cd /src && tar czvpf - centreon-gorgone) | dd of=centreon-gorgone-$VERSION.tar.gz
 cp -rv /src/centreon-gorgone /build/
 cp -rv /src/centreon-gorgone/ci/debian /build/centreon-gorgone/
-sed -i "s/^centreon:version=.*$/centreon:version=${VERSION}/" /build/centreon-gorgone/debian/substvars
+sed -i "s/^centreon:version=.*$/centreon:version=$(echo $VERSION | egrep -o '^[0-9][0-9].[0-9][0-9]')/" debian/substvars
 
 pwd
 ls -lart

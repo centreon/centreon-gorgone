@@ -93,6 +93,16 @@ try {
         stash name: "rpms-alma8", includes: 'output/noarch/*.rpm'
         sh 'rm -rf output'
       }
+    },
+    'Debian bullseye packaging and signing': {
+      node {
+        dir('centreon-gorgone') {
+          checkout scm
+        }
+        sh 'docker run -i --entrypoint "/src/centreon-gorgone/ci/scripts/gorgone-deb-package.sh" -v "$PWD:/src" -e "DISTRIB=bullseye" -e "VERSION=$VERSION" -e "RELEASE=$RELEASE" registry.centreon.com/centreon-gorgone-debian11-dependencies:22.04'
+        stash name: 'Debian11', includes: '*.deb'
+        archiveArtifacts artifacts: "*.deb"
+      }
     }
 
     if ((currentBuild.result ?: 'SUCCESS') != 'SUCCESS') {

@@ -50,7 +50,7 @@ if ($type eq 'rpm') {
 } elsif ($type eq 'deb') {
     $command = 'apt-get -y install';
     foreach (@$plugins) {
-        $command .= " '" . $_ . "-*'"
+        $command .= " '" . lc($_) . "-*'"
     }
 }
 $command .= ' 2>&1';

@@ -2,16 +2,17 @@
 ** Variables.
 */
 def serie = '22.04'
-def maintenanceBranch = "${serie}.x"
-def qaBranch = "dev-${serie}.x"
-env.REF_BRANCH = 'master'
+def stableBranch = "22.04.x"
+def devBranch = "dev-22.04.x"
+env.REF_BRANCH = stableBranch
 env.PROJECT='centreon-gorgone'
 if (env.BRANCH_NAME.startsWith('release-')) {
   env.BUILD = 'RELEASE'
   env.REPO = 'testing'
-} else if (env.BRANCH_NAME == maintenanceBranch) {
+} else if ((env.BRANCH_NAME == env.REF_BRANCH) || (env.BRANCH_NAME == maintenanceBranch)) {
   env.BUILD = 'REFERENCE'
-} else if (env.BRANCH_NAME == qaBranch) {
+  env.REPO = '22.04'
+} else if ((env.BRANCH_NAME == 'develop') || (env.BRANCH_NAME == qaBranch)) {
   env.BUILD = 'QA'
   env.REPO = 'unstable'
 } else {
@@ -102,7 +103,7 @@ try {
         dir('centreon-gorgone') {
           checkout scm
         }
-        sh 'docker run -i --entrypoint "/src/centreon-gorgone/ci/scripts/gorgone-deb-package.sh" -v "$PWD:/src" -e "DISTRIB=bullseye" -e "VERSION=$VERSION" -e "RELEASE=$RELEASE" registry.centreon.com/centreon-gorgone-debian11-dependencies:22.10'
+        sh 'docker run -i --entrypoint "/src/centreon-gorgone/ci/scripts/gorgone-deb-package.sh" -v "$PWD:/src" -e "DISTRIB=bullseye" -e "VERSION=$VERSION" -e "RELEASE=$RELEASE" registry.centreon.com/centreon-gorgone-debian11-dependencies:22.04'
         stash name: 'Debian11', includes: '*.deb'
         archiveArtifacts artifacts: "*.deb"
       }

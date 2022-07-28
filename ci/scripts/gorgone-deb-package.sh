@@ -51,7 +51,7 @@ cp -rv /src/centreon-gorgone/ci/debian /build/centreon-gorgone/
 sed -i "s/^centreon:version=.*$/centreon:version=$(echo $VERSION | egrep -o '^[0-9][0-9].[0-9][0-9]')/" /build/centreon-gorgone/debian/substvars
 
 # update apt local package db
-apt update
+apt-get update
 
 pwd
 ls -lart

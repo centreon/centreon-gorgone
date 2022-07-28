@@ -11,6 +11,8 @@ echo "################################################## PACKAGING COLLECT #####
 AUTHOR="Luiz Costa"
 AUTHOR_EMAIL="me@luizgustavo.pro.br"
 
+apt-get update
+
 pwd
 
 if [ -d /build ]; then
@@ -49,9 +51,6 @@ mkdir -p /build/centreon-gorgone
 cp -rv /src/centreon-gorgone /build/
 cp -rv /src/centreon-gorgone/ci/debian /build/centreon-gorgone/
 sed -i "s/^centreon:version=.*$/centreon:version=$(echo $VERSION | egrep -o '^[0-9][0-9].[0-9][0-9]')/" /build/centreon-gorgone/debian/substvars
-
-# update apt local package db
-apt-get update
 
 pwd
 ls -lart

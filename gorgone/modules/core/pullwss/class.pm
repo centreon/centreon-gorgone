@@ -81,7 +81,13 @@ sub handle_TERM {
         },
         json_encode => 1
     );
-    $self->{tx}->send({text => $message }) if ($self->{connected} == 1);
+
+    if ($self->{connected} == 1) {
+        $self->{tx}->send({text => $message });
+        $self->{tx}->on(drain => sub { Mojo::IOLoop->stop_gracefully(); });
+    } else {
+        Mojo::IOLoop->stop_gracefully();
+    }
 }
 
 sub class_handle_TERM {
@@ -123,12 +129,7 @@ sub ping {
         json_encode => 1
     );
 
-    if ($self->{connected} == 1) {
-        $self->{tx}->send({text => $message });
-        $self->{tx}->on(drain => sub { Mojo::IOLoop->stop_gracefully(); });
-    } else {
-        Mojo::IOLoop->stop_gracefully();
-    }
+    $self->{tx}->send({text => $message }) if ($self->{connected} == 1);
 }
 
 sub wss_connect {

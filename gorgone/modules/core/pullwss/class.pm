@@ -67,6 +67,7 @@ sub handle_TERM {
     my $self = shift;
     $self->{logger}->writeLogDebug("[pullwss] $$ Receiving order to stop...");
     $self->{stop} = 1;
+    Mojo::IOLoop->stop_gracefully();
 }
 
 sub class_handle_TERM {

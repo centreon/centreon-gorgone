@@ -267,7 +267,9 @@ sub validate_plugins_rpm {
     ($rv, $message, $installed) = $self->check_plugins_rpm(%options);
     return ($rv, $message) if ($rv == -1);
     if ($rv == 1) {
-        $self->{logger}->writeLogError("[action] validate plugins - still some to install: " . join(' ', @$installed));
+        $message = 'validate plugins - still some to install: ' . join(' ', @$installed);
+        $self->{logger}->writeLogError("[action] $message");
+        return (1, $message);
     }
 
     return 0;
@@ -293,7 +295,9 @@ sub validate_plugins_deb {
     ($rv, $message, $installed) = $self->check_plugins_deb(plugins => $plugins);
     return ($rv, $message) if ($rv == -1);
     if ($rv == 1) {
-        $self->{logger}->writeLogError("[action] validate plugins - still some to install: " . join(' ', @$installed));
+        $message = 'validate plugins - still some to install: ' . join(' ', @$installed);
+        $self->{logger}->writeLogError("[action] $message");
+        return (1, $message);
     }
 
     return 0;

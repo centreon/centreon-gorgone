@@ -248,8 +248,8 @@ sub install_plugins {
         redirect_stderr => 1,
         logger => $self->{logger}
     );
-    if ($error != 0 || $return_code != 0) {
-        $self->{logger}->writeLogDebug("[action] error during install. Command output: [\"$stdout\"]");
+    $self->{logger}->writeLogDebug("[action] install plugins. Command output: [\"$stdout\"]");
+    if ($error != 0) {
         return (-1, 'install plugins command issue: ' . $stdout);
     }
 

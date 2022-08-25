@@ -325,7 +325,7 @@ sub api_call {
 
     my $content;
     eval {
-        $content = JSON::XS->new->utf8->decode($request->content)
+        $content = JSON::XS->new->decode($request->content)
             if ($request->method =~ /POST|PATCH/ && defined($request->content));
     };
     if ($@) {

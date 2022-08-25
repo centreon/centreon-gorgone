@@ -69,7 +69,7 @@ websocket '/' => sub {
 
         my $content;
         eval {
-            $content = JSON::XS->new->utf8->decode($msg);
+            $content = JSON::XS->new->decode($msg);
         };
         if ($@) {
             $connector->close_websocket(
@@ -316,7 +316,7 @@ sub read_log_event {
     if (defined($options{data})) {
         my $content;
         eval {
-            $content = JSON::XS->new->utf8->decode($options{data});
+            $content = JSON::XS->new->decode($options{data});
         };
         if ($@) {
             $response = { error => 'decode_error', message => 'Cannot decode response' };
@@ -345,7 +345,7 @@ sub read_listener {
 
     my $content;
     eval {
-        $content = JSON::XS->new->utf8->decode($options{data});
+        $content = JSON::XS->new->decode($options{data});
     };
     if ($@) {
         $self->{token_watch}->{ $options{token} }->{mojo}->render(json => { error => 'decode_error', message => 'Cannot decode response' });

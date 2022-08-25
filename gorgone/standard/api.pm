@@ -163,14 +163,14 @@ sub call_internal {
     if (defined($results->{$action_token}->{data})) {
         my $content;
         eval {
-            $content = JSON::XS->new->utf8->decode($results->{$action_token}->{data});
+            $content = JSON::XS->new->decode($results->{$action_token}->{data});
         };
         if ($@) {
             $response = '{"error":"decode_error","message":"Cannot decode response"}';
         } else {
             if (defined($content->{data})) {
                 eval {
-                    $response = JSON::XS->new->utf8->encode($content->{data});
+                    $response = JSON::XS->new->encode($content->{data});
                 };
                 if ($@) {
                     $response = '{"error":"encode_error","message":"Cannot encode response"}';
@@ -231,13 +231,13 @@ sub get_log {
     if (defined($results->{ $token_log }) && defined($results->{ $token_log }->{data})) {
         my $content;
         eval {
-            $content = JSON::XS->new->utf8->decode($results->{ $token_log }->{data});
+            $content = JSON::XS->new->decode($results->{ $token_log }->{data});
         };
         if ($@) {
             $response = '{"error":"decode_error","message":"Cannot decode response"}';
         } elsif (defined($content->{data}->{result}) && scalar(@{$content->{data}->{result}}) > 0) {
             eval {
-                $response = JSON::XS->new->utf8->encode(
+                $response = JSON::XS->new->encode(
                     {
                         message => "Logs found",
                         token => $options{token},

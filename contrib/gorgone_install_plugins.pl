@@ -56,8 +56,10 @@ if ($type eq 'rpm') {
 $command .= ' 2>&1';
 
 my $output = `$command`;
-if ($? == -1) {
-    print "failed to execute: $!\n";
+my $exit = $? >> 8;
+
+if ($? == -1 || $exit == 100) {
+    print "failed to execute: $output\n";
     exit(1);
 } elsif ($? & 127) {
     printf "child died with signal %d, %s coredump\n",
@@ -65,6 +67,5 @@ if ($? == -1) {
     exit(1);
 }
 
-my $exit = $? >> 8;
 print "succeeded command (code: $exit): " . $output;
 exit(0);

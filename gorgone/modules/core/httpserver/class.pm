@@ -217,7 +217,10 @@ sub run {
             exit(0);
         }
 
-        next if (!defined($connection));
+        if (!defined($connection)) {
+            gorgone::standard::api::event(httpserver => $self);
+            next;
+        }
 
         while (my $request = $connection->get_request) {
             if ($connection->antique_client eq '1') {

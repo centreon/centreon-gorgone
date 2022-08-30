@@ -30,7 +30,7 @@ use JSON::XS;
 
 my $module;
 my $socket;
-my $results;
+my $results = {};
 my $action_token;
 
 sub root {
@@ -255,8 +255,11 @@ sub get_log {
 }
 
 sub event {
+    my (%options) = @_;
+
+    my $httpserver = defined($options{httpserver}) ? $options{httpserver} : $module;
     while (1) {
-        my $message = $module->read_message();
+        my $message = $httpserver->read_message();
         last if (!defined($message));
 
         if ($message =~ /^\[(.*?)\]\s+\[([a-zA-Z0-9:\-_]*?)\]\s+\[.*?\]\s+(.*)$/m || 
@@ -267,8 +270,10 @@ sub event {
                 token => $token,
                 data => $data
             };
-            if ((my $method = $module->can('action_' . lc($action)))) {
-                $method->($module, token => $token, data => $data);
+            if ((my $method = $httpserver->can('action_' . lc($action)))) {
+                my ($rv, $decoded) = $httpserver->json_decode(argument => $data, token => $token);
+                next if ($rv);
+                $method->($httpserver, token => $token, data => $decoded);
             }
         }
     }

@@ -393,7 +393,7 @@ sub read_zmq_events {
                     }
                 }
                 if ((my $method = $connector->can('action_' . lc($action)))) {
-                    my ($rv, $decoded) = $httpserver->json_decode(argument => $data, token => $token);
+                    my ($rv, $decoded) = $connector->json_decode(argument => $data, token => $token);
                     if (!$rv) {
                         $method->($connector, token => $token, data => $decoded);
                     }

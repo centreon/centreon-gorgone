@@ -60,6 +60,13 @@ sub new {
     $connector->{allowed_cmds} = $connector->{config}->{allowed_cmds}
         if (defined($connector->{config}->{allowed_cmds}) && ref($connector->{config}->{allowed_cmds}) eq 'ARRAY');
 
+    if (defined($connector->{config}->{tar_insecure_extra_mode}) && $connector->{config}->{tar_insecure_extra_mode} =~ /^(?:1|true)$/) {
+        $Archive::Tar::INSECURE_EXTRACT_MODE = 1;
+    }
+
+    $connector->{paranoid_plugins} = defined($connector->{config}->{paranoid_plugins}) && $connector->{config}->{paranoid_plugins} =~ /true|1/i ?
+        1 : 0;
+
     $connector->{return_childs} = {};
     $connector->{engine_childs} = {};
     $connector->{max_concurrent_engine} = defined($connector->{config}->{max_concurrent_engine}) ?
@@ -154,7 +161,7 @@ sub get_package_manager {
     $self->{package_manager} = 'unknown';
     if ($os =~ /Debian|Ubuntu/i) {
         $self->{package_manager} = 'deb';
-    } elsif ($os =~ /CentOS|Redhat|rhel|almalinux/i) {
+    } elsif ($os =~ /CentOS|Redhat|rhel|almalinux|rocky/i) {
         $self->{package_manager} = 'rpm';
     } elsif ($os eq 'ol' || $os =~ /Oracle Linux/i) {
         $self->{package_manager} = 'rpm';
@@ -245,6 +252,7 @@ sub install_plugins {
         redirect_stderr => 1,
         logger => $self->{logger}
     );
+    $self->{logger}->writeLogDebug("[action] install plugins. Command output: [\"$stdout\"]");
     if ($error != 0) {
         return (-1, 'install plugins command issue: ' . $stdout);
     }
@@ -256,18 +264,20 @@ sub validate_plugins_rpm {
     my ($self, %options) = @_;
 
     my ($rv, $message, $installed) = $self->check_plugins_rpm(%options);
-    return ($rv, $message) if ($rv == -1);
+    return (1, $message) if ($rv == -1);
     return 0 if ($rv == 0);
 
     if ($rv == 1) {
         ($rv, $message) = $self->install_plugins(type => 'rpm', installed => $installed);
-        return ($rv, $message) if ($rv == -1);
+        return (1, $message) if ($rv == -1);
     }
 
     ($rv, $message, $installed) = $self->check_plugins_rpm(%options);
-    return ($rv, $message) if ($rv == -1);
+    return (1, $message) if ($rv == -1);
     if ($rv == 1) {
-        $self->{logger}->writeLogError("[action] validate plugins - still some to install: " . join(' ', @$installed));
+        $message = 'validate plugins - still some to install: ' . join(' ', @$installed);
+        $self->{logger}->writeLogError("[action] $message");
+        return (1, $message);
     }
 
     return 0;
@@ -282,18 +292,20 @@ sub validate_plugins_deb {
     }
 
     my ($rv, $message, $installed) = $self->check_plugins_deb(plugins => $plugins);
-    return ($rv, $message) if ($rv == -1);
+    return (1, $message) if ($rv == -1);
     return 0 if ($rv == 0);
 
     if ($rv == 1) {
         ($rv, $message) = $self->install_plugins(type => 'deb', installed => $installed);
-        return ($rv, $message) if ($rv == -1);
+        return (1, $message) if ($rv == -1);
     }
 
     ($rv, $message, $installed) = $self->check_plugins_deb(plugins => $plugins);
-    return ($rv, $message) if ($rv == -1);
+    return (1, $message) if ($rv == -1);
     if ($rv == 1) {
-        $self->{logger}->writeLogError("[action] validate plugins - still some to install: " . join(' ', @$installed));
+        $message = 'validate plugins - still some to install: ' . join(' ', @$installed);
+        $self->{logger}->writeLogError("[action] $message");
+        return (1, $message);
     }
 
     return 0;
@@ -307,7 +319,7 @@ sub validate_plugins {
 
     my $plugins;
     eval {
-        $plugins = JSON::XS->new->utf8->decode($content);
+        $plugins = JSON::XS->new->decode($content);
     };
     if ($@) {
         return (1, 'cannot decode json');
@@ -657,7 +669,7 @@ sub action_actionengine {
 
     if (defined($options{data}->{content}->{plugins}) && $options{data}->{content}->{plugins} ne '') {
         my ($rv, $message) = $self->validate_plugins(file => $options{data}->{content}->{plugins});
-        if ($rv) {
+        if ($rv && $self->{paranoid_plugins} == 1) {
             $self->{logger}->writeLogError("[action] $message");
             $self->send_log(
                 socket => $options{socket_log},

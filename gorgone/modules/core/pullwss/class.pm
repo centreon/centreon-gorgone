@@ -67,6 +67,27 @@ sub handle_TERM {
     my $self = shift;
     $self->{logger}->writeLogDebug("[pullwss] $$ Receiving order to stop...");
     $self->{stop} = 1;
+    
+    my $message = gorgone::standard::library::build_protocol(
+        action => 'UNREGISTERNODES',
+        data => {
+            nodes => [
+                {
+                    id => $self->get_core_config(name => 'id'),
+                    type => 'wss',
+                    identity => $self->get_core_config(name => 'id')
+                }
+            ]
+        },
+        json_encode => 1
+    );
+
+    if ($self->{connected} == 1) {
+        $self->{tx}->send({text => $message });
+        $self->{tx}->on(drain => sub { Mojo::IOLoop->stop_gracefully(); });
+    } else {
+        Mojo::IOLoop->stop_gracefully();
+    }
 }
 
 sub class_handle_TERM {
@@ -130,7 +151,7 @@ sub wss_connect {
     }
 
     $self->{ua}->websocket(
-        $proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '/' => { Authentication => 'Bearer ' . $self->{config}->{token} } => sub {
+        $proto . '://' . $self->{config}->{address} . ':' . $self->{config}->{port} . '/' => { Authorization => 'Bearer ' . $self->{config}->{token} } => sub {
             my ($ua, $tx) = @_;
 
             $connector->{tx} = $tx;
@@ -217,7 +238,7 @@ sub transmit_back {
     if ($options{message} =~ /^\[ACK\]\s+\[(.*?)\]\s+(.*)/m) {
         my $data;
         eval {
-            $data = JSON::XS->new->utf8->decode($2);
+            $data = JSON::XS->new->decode($2);
         };
         if ($@) {
             return $options{message};

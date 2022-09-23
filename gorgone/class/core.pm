@@ -92,7 +92,7 @@ sub init_server_keys {
     $self->{keys_loaded} = 0;
     $self->{config} = { configuration => {} } if (!defined($self->{config}->{configuration}));
     $self->{config}->{configuration} = { gorgone => {} } if (!defined($self->{config}->{configuration}->{gorgone}));
-    $self->{config}->{configuration}->{gorgone} = { gorgonecore => {} } if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}));
+    $self->{config}->{configuration}->{gorgone}->{gorgonecore} = {} if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}));
 
     $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{privkey} = '/var/lib/centreon-gorgone/.keys/rsakey.priv.pem'
         if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{privkey}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{privkey} eq '');
@@ -179,10 +179,10 @@ sub init {
     $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} = '/tmp/gorgone/routing-' . $time_hi . '.ipc'
         if (!defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path}) || $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_path} eq '');
 
-    if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt}) && $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} =~ /^(?:true|1)$/i) {
-        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 1;
-    } else {
+    if (defined($self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt}) && $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} =~ /^(?:false|0)$/i) {
         $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 0;
+    } else {
+        $self->{config}->{configuration}->{gorgone}->{gorgonecore}->{internal_com_crypt} = 1;
     }
 
     $self->{internal_crypt} = { enabled => 0 };

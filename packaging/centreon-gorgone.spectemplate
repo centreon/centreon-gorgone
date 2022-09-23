@@ -1,5 +1,5 @@
 Name:       centreon-gorgone
-Version:    22.04.0
+Version:    22.04.1
 Release:    @RELEASE@%{?dist}
 Summary:    Perl daemon task handlers
 Group:      Applications/System
@@ -19,6 +19,7 @@ Requires:   perl(ZMQ::Constants)
 Requires:   perl(JSON::XS)
 Requires:   perl(JSON::PP)
 Requires:   perl(XML::Simple)
+Requires:   perl(XML::LibXML::Simple)
 Requires:   perl(Net::SMTP)
 Requires:   perl(YAML::XS)
 Requires:   perl(DBD::SQLite)

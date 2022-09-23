@@ -69,7 +69,6 @@ sub new {
 
     $connector->{paranoid_plugins} = defined($connector->{config}->{paranoid_plugins}) && $connector->{config}->{paranoid_plugins} =~ /true|1/i ?
         1 : 0;
-
     $connector->{return_childs} = {};
     $connector->{engine_childs} = {};
     $connector->{max_concurrent_engine} = defined($connector->{config}->{max_concurrent_engine}) ?

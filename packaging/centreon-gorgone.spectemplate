@@ -1,5 +1,5 @@
 Name:       centreon-gorgone
-Version:    21.10.2
+Version:    21.10.3
 Release:    @RELEASE@%{?dist}
 Summary:    Perl daemon task handlers
 Group:      Applications/System
@@ -20,6 +20,7 @@ Requires:   perl(Crypt::CBC)
 Requires:   perl(JSON::XS)
 Requires:   perl(JSON::PP)
 Requires:   perl(XML::Simple)
+Requires:   perl(XML::LibXML::Simple)
 Requires:   perl(Net::SMTP)
 Requires:   perl(YAML::XS)
 Requires:   perl(DBD::SQLite)
@@ -36,6 +37,8 @@ Requires:   perl(NetAddr::IP)
 Requires:   perl(Hash::Merge)
 Requires:   perl(Clone)
 Requires:   perl(Sys::Syslog)
+Requires:   perl(DateTime)
+Requires:   perl(Try::Tiny)
 AutoReqProv: no
 
 %description

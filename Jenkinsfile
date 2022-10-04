@@ -6,7 +6,12 @@ def maintenanceBranch = "master"
 def qaBranch = "develop"
 env.REF_BRANCH = 'master'
 env.PROJECT='centreon-gorgone'
-if (env.BRANCH_NAME.startsWith('release-')) {
+
+
+if (env.BRANCH_NAME.startsWith('release-22.10.0-next')) {
+  env.BUILD = 'QA'
+  env.REPO = 'unstable'
+} else if (env.BRANCH_NAME.startsWith('release-')) {
   env.BUILD = 'RELEASE'
   env.REPO = 'testing'
 } else if (env.BRANCH_NAME == maintenanceBranch) {

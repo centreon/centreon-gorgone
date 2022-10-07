@@ -2,7 +2,7 @@
 
 Centreon Gorgone and his "gorgoned" daemon is a lightweight, distributed, modular tasks handler.
 
-It provides a set of actions like:
+It provides a set of actionss like:
 
 * Execute commands
 * Send files/directories,

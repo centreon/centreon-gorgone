@@ -58,7 +58,7 @@ def checkoutCentreonBuild(buildBranch) {
 /*
 ** Pipeline code.
 */
-stage('Deliver sources // Sonar analysis') {
+stage('Deliver sources') {
   node {
     checkoutCentreonBuild(buildBranch)
     dir('centreon-gorgone') {
